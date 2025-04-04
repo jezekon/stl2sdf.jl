@@ -10,6 +10,16 @@ using stl2sdf.MeshGrid
     RUN_lin_beam = true
 
     if RUN_lin_beam
+      taskName = "beam-approx"
+
+      # # Data from Matlab:
+      data = read("../data/$(taskName).stl")
+      # data = matread("test/" * taskName * ".mat")
+      
+      (X, IEN) = GenerateMesh.MeshInformations(data)
+
+      # # input data propertis (mesh, density)
+      mesh = Rho2sdf.Mesh(X, IEN)
     
     end
 end
