@@ -8,10 +8,11 @@ using LinearAlgebra
 using StaticArrays
 using Printf
 using Base.Threads
-using Rho2sdf.TerminalUtils
+using stl2sdf.TerminalUtils
 
 include("MeshVolume.jl")
 include("MeshInformations.jl")
+include("MeshUtils.jl")
 include("SurfaceTriangularMesh.jl")
 include("Grid.jl")
 include("Grid_setup.jl")
