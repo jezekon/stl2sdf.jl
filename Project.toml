@@ -1,0 +1,4 @@
+name = "stl2sdf"
+uuid = "799ee158-3091-464b-a66d-482502e2e348"
+authors = ["jezekon <78500480+jezekon@users.noreply.github.com>"]
+version = "0.1.0"
