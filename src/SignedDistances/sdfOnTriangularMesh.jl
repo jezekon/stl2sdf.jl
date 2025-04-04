@@ -168,11 +168,11 @@ function evalDistancesOnTriangularMesh(mesh::TriangularMesh, grid::Grid)
     IEN = [[i; i + nnp] for i = 1:nnp]
     X = vec([Xg Xp])
 
-    Rho2sdf.exportToVTU("lines_STL.vtu", X, IEN, 3)
+    stl2sdf.exportToVTU("lines_STL.vtu", X, IEN, 3)
 
     IEN = [[i] for i = 1:nnp]
-    Rho2sdf.exportToVTU("Xg_STL.vtu", Xg, IEN, 1)
-    Rho2sdf.exportToVTU("Xp_STL.vtu", Xp, IEN, 1)
+    stl2sdf.exportToVTU("Xg_STL.vtu", Xg, IEN, 1)
+    stl2sdf.exportToVTU("Xp_STL.vtu", Xp, IEN, 1)
 
     return dist
 end

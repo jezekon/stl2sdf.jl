@@ -12,9 +12,9 @@ using ProgressMeter
 # using NLopt
 using BenchmarkTools
 
-using Rho2sdf.TerminalUtils
-using Rho2sdf.MeshGrid
-using Rho2sdf
+using stl2sdf.TerminalUtils
+using stl2sdf.MeshGrid
+using stl2sdf
 
 # Compute local coords:
 include("PseudoNormals.jl")
