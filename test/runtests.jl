@@ -1,9 +1,11 @@
 using Test
 using LinearAlgebra
 using stl2sdf
+using stl2sdf.DataImport
 using stl2sdf.MeshGrid
-# using stl2sdf.SignedDistances
+using stl2sdf.SignedDistances
 # using stl2sdf.SdfSmoothing
+using stl2sdf.DataExport
 
 @testset "stl2sdf.jl" begin
     # Test configuration flags
@@ -11,15 +13,30 @@ using stl2sdf.MeshGrid
 
     if RUN_lin_beam
       taskName = "beam-approx"
+      N = 100  # Number of cells along the longest side
 
-      # # Data from Matlab:
-      data = read("../data/$(taskName).stl")
-      # data = matread("test/" * taskName * ".mat")
+      # Data from stl:
+      (X, IEN) = import_stl("../data/$(taskName).stl") # -> Vector of vectors
+      # (X, IEN) = import_stl("data/$(taskName).stl")
       
-      (X, IEN) = GenerateMesh.MeshInformations(data)
+      # Data from Tetgen
+      (X_tet, IEN_tet) = import_tetgen_mesh("../data/$(taskName).1") # -> Vector of vectors
+      # (X_tet, IEN_tet) = import_tetgen_mesh("data/$(taskName).1")
 
-      # # input data propertis (mesh, density)
-      mesh = Rho2sdf.Mesh(X, IEN)
-    
+      TriMesh = TriangularMesh(X, IEN)
+      TetMesh = Mesh(X_tet, IEN_tet)
+
+      ## Grid:
+      X_min, X_max = getMesh_AABB(TriMesh.X)
+      sdf_grid = Grid(X_min, X_max, N, 3) # cartesian grid
+      points = generateGridPoints(sdf_grid) # uzly pravidelné mřížky
+     
+      ## SFD from triangular mesh:
+      (dists, xp) = evalDistancesOnTriMesh(TriMesh, sdf_grid, points) # Vector{Float64}
+      signs = @time SignDetection(TetMesh, sdf_grid, points)
+      sdf_dists = dists .* signs
+
+      exportStructuredPointsToVTK(taskName * "_SDF.vtk", sdf_grid, sdf_dists, "distance")
+
     end
 end
