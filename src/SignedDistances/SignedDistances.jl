@@ -1,19 +1,17 @@
 module SignedDistances
 
-export evalDistancesOnTriangularMesh, Sign_Detection
+export evalDistancesOnTriMesh, SignDetection
 
 using Base.Threads
-# using Einsum
 using Statistics
 using StaticArrays
 using LinearAlgebra
-# using DelimitedFiles
 using ProgressMeter
-# using NLopt
 using BenchmarkTools
 
 using stl2sdf.TerminalUtils
 using stl2sdf.MeshGrid
+using stl2sdf.DataExport
 using stl2sdf
 
 # Compute local coords:
