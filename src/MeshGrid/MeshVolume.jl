@@ -1,68 +1,63 @@
 """
-Calculate volume of 8-node hexahedral elements using Gaussian quadrature.
-Inputs:
-- X: 3×n matrix of nodal coordinates
-- IEN: 8×m connectivity matrix
-Returns:
-- total volume of the mesh
-using FastGaussQuadrature
-gp, w = gausslegendre(2)
-"""
+    calculate_tetrahedral_mesh_volume(X::Vector{Vector{Float64}}, IEN::Vector{Vector{Int64}})
 
+Calculate volume of a mesh composed of tetrahedral elements.
+
+Inputs:
+- X: Vector of node coordinate vectors, where each inner vector contains [x,y,z] coordinates
+- IEN: Vector of element connectivity vectors, where each inner vector contains the indices of the 4 nodes
+  of a tetrahedral element
+
+Returns:
+- total volume of the mesh (Float64)
+"""
 function calculate_mesh_volume(
-  X::Vector{Vector{Float64}},
-  IEN::Vector{Vector{Int64}},
-  rho::Vector{Float64};
-  quad_order::Int=3  # Výchozí řád integrace je 3, stejný jako v původní funkci
+    X::Vector{Vector{Float64}},
+    IEN::Vector{Vector{Int64}}
 )
-  print_info("Computing volume...")
-  # Výpočet Gauss-Legendreových bodů a vah pro zadaný řád integrace
-  gp_raw, w_raw = gausslegendre(quad_order)
-  # Převod na statické vektory pro lepší výkon
-  gp = SVector{quad_order}(gp_raw)
-  w = SVector{quad_order}(w_raw)
-  
-  # Atomické proměnné pro thread-safe akumulaci objemů
-  domain_volume = Atomic{Float64}(0.0)
-  TO_volume = Atomic{Float64}(0.0)
-  
-  # Paralelní zpracování elementů
-  @threads for elem in 1:length(IEN)
-    # Pre-alokace polí pro tvarové funkce a jejich derivace - přesunuté dovnitř paralelní smyčky
-    local_N = MVector{8,Float64}(undef)
-    local_dN = MMatrix{8,3,Float64}(undef)
+    print_info("Computing tetrahedral mesh volume...")
     
-    # Konverze souřadnic elementu na statickou matici
-    xe = @SMatrix [X[IEN[elem][j]][i] for i in 1:3, j in 1:8]
+    # Atomic variable for thread-safe volume accumulation
+    total_volume = Atomic{Float64}(0.0)
     
-    # Výpočet objemu elementu pomocí Gaussovy kvadratury
-    elem_volume = 0.0
-    for k in 1:quad_order, j in 1:quad_order, i in 1:quad_order
-      local_coords = SVector{3}(gp[i], gp[j], gp[k])
-      
-      # Výpočet tvarových funkcí a jejich derivací s thread-lokálními proměnnými
-      compute_hex8_shape!(local_N, local_dN, local_coords[1], local_coords[2], local_coords[3])
-      
-      # Výpočet Jakobiánu pomocí optimalizovaného maticového násobení
-      J = xe * local_dN
-      
-      # Akumulace příspěvku k objemu
-      elem_volume += w[i] * w[j] * w[k] * abs(det(J))
+    # Parallel processing of elements
+    @threads for elem in 1:length(IEN)
+        # For a tetrahedron, we need 4 nodes
+        if length(IEN[elem]) != 4
+            print_warning("Element $elem does not have 4 nodes. Skipping...")
+            continue
+        end
+        
+        # Extract coordinates of the 4 vertices of the tetrahedron
+        v1 = X[IEN[elem][1]]
+        v2 = X[IEN[elem][2]]
+        v3 = X[IEN[elem][3]]
+        v4 = X[IEN[elem][4]]
+        
+        # Calculate element volume using the scalar triple product formula
+        # V = (1/6) * |((v2-v1) × (v3-v1))·(v4-v1)|
+        edge1 = v2 - v1
+        edge2 = v3 - v1
+        edge3 = v4 - v1
+        
+        # Calculate volume using the scalar triple product
+        # Convert vectors to SVector for better performance
+        e1 = SVector{3, Float64}(edge1)
+        e2 = SVector{3, Float64}(edge2)
+        e3 = SVector{3, Float64}(edge3)
+        
+        # Volume = (1/6) * |determinant of the matrix formed by the 3 edges|
+        elem_volume = abs(dot(cross(e1, e2), e3)) / 6.0
+        
+        # Thread-safe update of total volume
+        atomic_add!(total_volume, elem_volume)
     end
     
-    # Thread-safe aktualizace objemů
-    atomic_add!(domain_volume, elem_volume)
-    atomic_add!(TO_volume, elem_volume * rho[elem])
-  end
-  
-  # Získání finálních hodnot objemů
-  final_domain_volume = domain_volume[]
-  final_TO_volume = TO_volume[]
-  
-  # Výpis výsledků
-  println("Topology optimization domain volume: ", round(final_domain_volume, sigdigits=6))
-  print_data("Optimized shape volume: $(round(final_TO_volume, sigdigits=6))")
-  println("Volume fraction: ", round(final_TO_volume / final_domain_volume, sigdigits=6))
-  
-  return [final_domain_volume, (final_TO_volume / final_domain_volume)]
+    # Get final total volume
+    final_volume = total_volume[]
+    
+    # Print results
+    println("Total mesh volume: ", round(final_volume, sigdigits=6))
+    
+    return final_volume
 end
