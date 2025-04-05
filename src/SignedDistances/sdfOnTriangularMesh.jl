@@ -1,3 +1,45 @@
+# Selection of regular grid points that have been projected:
+function SelectProjectedNodes(
+  mesh::TriangularMesh,
+  grid::Grid,
+  xp::Matrix{Float64},
+  points::Matrix{Float64})
+
+  ngp = grid.ngp # number of nodes in grid
+  nsd = mesh.nsd # number of spacial dimensions
+
+  # Assuming ngp is defined somewhere in your code
+  # Preallocate arrays with maximum possible size
+  max_size = ngp * 2  # Adjust this based on your knowledge of the data
+  X = [zeros(Float64, nsd) for _ in 1:max_size]
+  Xp = [zeros(Float64, nsd) for _ in 1:max_size]
+
+  count = 0
+  for i = 1:ngp
+    if sum(abs.(xp[:, i])) > 1.0e-10
+      count += 1
+      X[count] = points[:, i]
+      Xp[count] = xp[:, i]
+    end
+  end
+
+  # If count is 0, indicating no points were added, handle gracefully
+  if count == 0
+    # println("WARNING: no projected points!")
+    return [], [], NaN, NaN
+  end
+
+  # Trim the unused preallocated space
+  X = resize!(X, count)
+  Xp = resize!(Xp, count)
+
+  # Mean and max projected distance:
+  mean_PD = mean(norm.(X - Xp))
+  max_PD = maximum(norm.(X - Xp))
+
+  return X, Xp, mean_PD, max_PD
+end
+
 function barycentricCoordinates(
   x₁::Vector{Float64}, # coordinates of vertex one of the triangle
   x₂::Vector{Float64}, # coordinates of vertex two of the triangle
@@ -50,11 +92,25 @@ function update_distance!(dist::Vector{Float64},
     return isFaceOrEdge  # Optionally return whether the vertex was updated
 end
 
+function update_distance_parallel!(dist_local::Vector{Vector{Float64}},
+  dist_tmp::Float64,
+  v::Int,
+  tid::Int,
+  xp_local::Vector{Matrix{Float64}},
+  xₚ::Vector{Float64},
+  isFaceOrEdge::Bool)
+
+  if abs(dist_tmp) < abs(dist_local[tid][v])
+    dist_local[tid][v] = dist_tmp
+    isFaceOrEdge = true
+    xp_local[tid][:, v] = xₚ  # Update the matrix column for vertex v, ???
+  end
+  return isFaceOrEdge  # Optionally return whether the vertex was updated
+end
 
   
-function evalDistancesOnTriangularMesh(mesh::TriangularMesh, grid::Grid)
+function evalDistancesOnTriMesh(mesh::TriangularMesh, grid::Grid, points::Matrix)
 
-    points = MeshGrid.generateGridPoints(grid)
     linkedList = MeshGrid.LinkedList(grid, points)
 
     println("Init pseudo normals...")
@@ -74,21 +130,36 @@ function evalDistancesOnTriangularMesh(mesh::TriangularMesh, grid::Grid)
     nel = mesh.nel # number of all elements
 
     ngp = grid.ngp
-    big = 1.0e10
-    # dists = [big * ones(ngp) for _ in 1:nthreads()]
-    # xps = [zeros(nsd, ngp) for _ in 1:nthreads()]
+    big = -1.0e10
     dist = big * ones(ngp)
     xp = zeros(nsd, ngp)
 
-    for el = 1:nel
-    # @threads for el = 1:nel
-        # Access thread-local variables
-        # dist = dists[threadid()]
-        # xp = xps[threadid()]
+
+    EN = NodePosition3D(mesh)
+    _, EPN = computePseudoNormals(mesh)
+
+    nthreads = Threads.nthreads()
+
+    dist_local = [fill(big, ngp) for _ in 1:nthreads]
+    xp_local = [zeros(nsd, ngp) for _ in 1:nthreads]
+
+    p_elements = Progress(nel, 1, "Processing elements: ", 30)
+
+    # Atomic countery pro oba cykly
+    counter_elements = Atomic{Int}(0)
+
+    update_interval_elements = max(1, div(nel, 100))
+
+    # for el = 1:nel
+    Threads.@threads for el in 1:nel
+        tid = Threads.threadid()
 
         Xt = X[:, IEN[:, el]] # coordinates of the vertices of the triangle
         
         x₁, x₂, x₃ = Xt[:, 1], Xt[:, 2], Xt[:, 3] # coordinates of nodes of the triangle
+
+        # finding coresponding triangle:
+        ID_tri = find_triangle_position(EN, [x₁ x₂ x₃])
 
         Et = calculate_triangle_edges(Xt)
 
@@ -98,61 +169,70 @@ function evalDistancesOnTriangularMesh(mesh::TriangularMesh, grid::Grid)
         # Nodes of mini AABB grid:
         Is = MeshGrid.calculateMiniAABB_grid(Xt, δ, N, AABB_min, AABB_max, nsd)
 
-        for I ∈ Is # cycle through the nodes of the mini AABB grid
-        # I is vector - node coords
-            i = Int( # node ID
+            for I ∈ Is # cycle through the nodes of the mini AABB grid
+              ii = Int( # node ID
                 I[3] * (N[1] + 1) * (N[2] + 1) + I[2] * (N[1] + 1) + I[1] + 1,
-            )
-            v = head[i]
-            while v != -1
+              )
+              v = head[ii]
+              while v != -1
                 x = points[:, v]
                 λ = barycentricCoordinates(x₁, x₂, x₃, n, x)
-        
+
                 xₚ = zeros(nsd) # projection
-                
+
                 isFaceOrEdge = false # projection check
 
-                # Inside triangle:
                 if (minimum(λ) >= 0.0) # xₚ is in the triangle, projection node x inside triangle 
-                    xₚ = λ[1] * x₁ + λ[2] * x₂ + λ[3] * x₃
-                    dist_tmp = dot(x - xₚ, n)
-                    
-                    isFaceOrEdge = update_distance!(dist, dist_tmp, v, xp, xₚ, isFaceOrEdge)
-                else
-                    
-                    # Edges of the triangle:
-                    for j = 1:3
-                        L = norm(Et[j]) # length of j triangle edge
-                        xᵥ = Xt[:, j]
-                        P = dot(x - xᵥ, Et[j] / L) # skalar product of vector (vertex&node) and norm edge
-                        if (P >= 0 && P <= L) # is the perpendicular projection of a node onto an edge in the edge interval?
-                            xₚ = xᵥ + (Et[j] / L) * P
-                            n_edge = EPN[el][j]
-                            dist_tmp = sign(dot(x - xₚ, n_edge)) * norm(x - xₚ) ## hustý, ale nechápu, asi ok
+                  xₚ = λ[1] * x₁ + λ[2] * x₂ + λ[3] * x₃
+                  dist_tmp = norm(x - xₚ)
 
-                            isFaceOrEdge = update_distance!(dist, dist_tmp, v, xp, xₚ, isFaceOrEdge)
-                        end
+                  isFaceOrEdge = update_distance_parallel!(dist_local, dist_tmp, v, tid, xp_local, xₚ, isFaceOrEdge)
+                else
+
+                  # Edges of the triangle:
+                  for j = 1:3
+                    L = norm(Et[j]) # length of j triangle edge
+                    xᵥ = Xt[:, j]
+                    P = dot(x - xᵥ, Et[j] / L) # skalar product of vector (vertex&node) and norm edge
+                    if (P >= 0 && P <= L) # is the perpendicular projection of a node onto an edge in the edge interval?
+                      xₚ = xᵥ + (Et[j] / L) * P
+                      n_edge = n
+                      n_edge = EPN[ID_tri][j]
+                      dist_tmp = norm(x - xₚ)
+
+                      isFaceOrEdge = update_distance_parallel!(dist_local, dist_tmp, v, tid, xp_local, xₚ, isFaceOrEdge)
                     end
+                  end
                 end
                 # Remaining cases:
-                if (isFaceOrEdge == false) 
-                    dist_tmp, idx =
-                        findmin([norm(x - x₁), norm(x - x₂), norm(x - x₃)]) # which node of the triangle is closer?
-                    xₚ = Xt[:, idx] # the node of triangle
-                    n_vertex = VPN[IEN[idx, el]]
-                    dist_tmp = dist_tmp * sign(dot(x - xₚ, n_vertex))
+                if (isFaceOrEdge == false)
+                  dist_tmp, idx =
+                    findmin([norm(x - x₁), norm(x - x₂), norm(x - x₃)]) # which node of the triangle is closer?
+                  xₚ = Xt[:, idx] # the node of triangle
+                  dist_tmp = norm(x - xₚ)
 
-                    isFaceOrEdge = update_distance!(dist, dist_tmp, v, xp, xₚ, isFaceOrEdge)
+                  isFaceOrEdge = update_distance_parallel!(dist_local, dist_tmp, v, tid, xp_local, xₚ, isFaceOrEdge)
                 end
                 v = next[v]
+              end
             end
+
+      count = atomic_add!(counter_elements, 1)
+      if count % update_interval_elements == 0
+        if Threads.threadid() == 1
+          update!(p_elements, count)
         end
+      end
     end
-    # dist = marchingCubes(dist, N.+1, big) 
 
-    # Combine results from each thread
-    # final_dist = reduce(min, dists)
+    # Merging the results after parallel calculation:
+    for i in 1:ngp
+      min_dist, min_idx = findmin(abs.(getindex.(dist_local, i)))
+      dist[i] = min_dist
+      xp[:, i] = xp_local[min_idx][:, i]
+    end
 
+  #NOTE: This part is used for checking distance function:
     for i in eachindex(dist)
         if (abs(dist[i]) > norm(grid.cell_size))
             dist[i] = sign(dist[i]) * norm(grid.cell_size)
@@ -174,7 +254,7 @@ function evalDistancesOnTriangularMesh(mesh::TriangularMesh, grid::Grid)
     stl2sdf.exportToVTU("Xg_STL.vtu", Xg, IEN, 1)
     stl2sdf.exportToVTU("Xp_STL.vtu", Xp, IEN, 1)
 
-    return dist
+    return dist, xp
 end
 
 
