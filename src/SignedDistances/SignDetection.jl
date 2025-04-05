@@ -1,4 +1,4 @@
-function compute_barycentric_coordinates(tetrahedron::Matrix{Float64}, point::Vector{Float64})
+function compute_barycentric_coordinates(tetrahedron::Matrix{Float64}, point::AbstractVector{Float64})
     # Create matrix of tetrahedron vertices and point
     # For a tetrahedron with vertices v₁, v₂, v₃, v₄
     # and a point p, we solve the system:
@@ -14,7 +14,7 @@ function compute_barycentric_coordinates(tetrahedron::Matrix{Float64}, point::Ve
     return A \ b
 end
 
-function is_point_in_tetrahedron(tetrahedron::Matrix{Float64}, point::Vector{Float64}, tolerance::Float64=1e-10)
+function is_point_in_tetrahedron(tetrahedron::Matrix{Float64}, point::AbstractVector{Float64}, tolerance::Float64=1e-10)
     # Compute barycentric coordinates
     bary_coords = compute_barycentric_coordinates(tetrahedron, point)
     
