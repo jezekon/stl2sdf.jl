@@ -12,15 +12,17 @@ using stl2sdf.DataExport
     RUN_lin_beam = true
 
     if RUN_lin_beam
-      taskName = "beam-approx"
-      N = 60  # Number of cells along the longest side
+      # taskName = "beam-approx"
+      taskName = "StanfordBunny_small"
+
+      N = 120  # Number of cells along the longest side
 
       # Data from stl:
       (X, IEN) = import_stl("../data/$(taskName).stl") # -> Vector of vectors
       # (X, IEN) = import_stl("data/$(taskName).stl")
       
       # Data from Tetgen
-      run_tetgen("beam-approx", "../data")  # Run in specified directory
+      run_tetgen(taskName, "../data")  # Run in specified directory
       (X_tet, IEN_tet) = import_tetgen_mesh("../data/$(taskName).1") # -> Vector of vectors
       # (X_tet, IEN_tet) = import_tetgen_mesh("data/$(taskName).1")
 
@@ -40,7 +42,7 @@ using stl2sdf.DataExport
       # RBF smoothing:
       (fine_sdf, fine_grid) = RBFs_smoothing(TetMesh, sdf_dists, sdf_grid, true, 1, taskName) # interpolation == true, aproximation == false, smooth
 
-      exportStructuredPointsToVTK(taskName * "_SDF.vtk", sdf_grid, sdf_dists, "distance")
+      exportSdfToVTI(taskName * "_SDF.vti", sdf_grid, sdf_dists, "distance")
 
     end
 end
