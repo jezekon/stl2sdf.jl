@@ -231,8 +231,8 @@ function RBFs_smoothing(
   fine_LSF_offset = fine_LSF .+ th
 
   B = round(my_grid.cell_size, digits=4)
-  # stl2sdf.exportStructuredPointsToVTK(taskName * "_smooth_B-" * string(B) * "_" * "_smooth-"$(smooth) * name * ".vtk", my_grid, fine_LSF_offset, "distance", smooth)
-  stl2sdf.exportStructuredPointsToVTK("$(taskName)_B-$(B)_smooth-$(smooth)_$(name).vtk", my_grid, fine_LSF_offset, "distance", smooth)
+  # stl2sdf.exportSdfToVTI(taskName * "_smooth_B-" * string(B) * "_" * "_smooth-"$(smooth) * name * ".vtk", my_grid, fine_LSF_offset, "distance", smooth)
+  exportSdfToVTI("$(taskName)_B-$(B)_smooth-$(smooth)_$(name).vti", my_grid, fine_LSF_offset, "distance", smooth)
 
   fine_LSF_offset_array = vector_to_array(fine_LSF_offset, dim)
 
