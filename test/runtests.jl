@@ -4,7 +4,7 @@ using stl2sdf
 using stl2sdf.DataImport
 using stl2sdf.MeshGrid
 using stl2sdf.SignedDistances
-# using stl2sdf.SdfSmoothing
+using stl2sdf.SdfSmoothing
 using stl2sdf.DataExport
 
 @testset "stl2sdf.jl" begin
@@ -13,7 +13,7 @@ using stl2sdf.DataExport
 
     if RUN_lin_beam
       taskName = "beam-approx"
-      N = 40  # Number of cells along the longest side
+      N = 60  # Number of cells along the longest side
 
       # Data from stl:
       (X, IEN) = import_stl("../data/$(taskName).stl") # -> Vector of vectors
@@ -36,6 +36,9 @@ using stl2sdf.DataExport
       (dists, xp) = evalDistancesOnTriMesh(TriMesh, sdf_grid, points) # Vector{Float64}
       signs = @time SignDetection(TetMesh, sdf_grid, points)
       sdf_dists = dists .* signs
+
+      # RBF smoothing:
+      (fine_sdf, fine_grid) = RBFs_smoothing(TetMesh, sdf_dists, sdf_grid, true, 1, taskName) # interpolation == true, aproximation == false, smooth
 
       exportStructuredPointsToVTK(taskName * "_SDF.vtk", sdf_grid, sdf_dists, "distance")
 

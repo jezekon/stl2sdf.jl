@@ -127,10 +127,10 @@ function rbf_interpolation_kdtree(fine_grid::Array, coarse_grid::Array, weights_
   return result
 end
 
-# Adjust the level-set function to maintain the volume fraction (V_frac)
+# Adjust the level-set function to maintain the volume
 function LS_Thresholdd(sdf::Array, grid::Array, mesh::Mesh, Exp::Int)
   # Calculate target volume from mesh properties
-  target_volume = mesh.V_frac * mesh.V_domain
+  target_volume = mesh.V_domain
     
   # Initialize threshold search variables
   eps = 1.0
@@ -242,7 +242,7 @@ function RBFs_smoothing(
   @save "Z_$(taskName)_FineGrid_B-$(B)_smooth-$(smooth)_$(name).jld2" fine_grid
 
   current_volume = calculate_volume_from_sdf(fine_sdf, fine_grid)
-  @info "Body volume at SDF zero level: $current_volume (target: $(round(mesh.V_frac * mesh.V_domain, digits=4)))"
+  @info "Body volume at SDF zero level: $current_volume (target: $(round(mesh.V_domain, digits=4)))"
 
   return fine_sdf, fine_grid
 end

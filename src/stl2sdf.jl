@@ -24,8 +24,8 @@ using .DataExport
 include("SignedDistances/SignedDistances.jl")
 using .SignedDistances
 
-# include("SdfSmoothing/SdfSmoothing.jl")
-# using .SdfSmoothing
+include("SdfSmoothing/SdfSmoothing.jl")
+using .SdfSmoothing
 
 # include("ImplicitDomainMeshing/ImplicitDomainMeshing.jl")
 # using .ImplicitDomainMeshing
