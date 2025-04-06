@@ -7,13 +7,13 @@ using Statistics
 using DelimitedFiles
 using BenchmarkTools
 
-# Import data from stl and Tetgen results:
-include("DataImport/DataImport.jl")
-using .DataImport
-
 # Tools for monitoring the computation process:
 include("TerminalUtils/TerminalUtils.jl")
 using .TerminalUtils
+
+# Import data from stl and Tetgen results:
+include("DataImport/DataImport.jl")
+using .DataImport
 
 include("MeshGrid/MeshGrid.jl")
 using .MeshGrid

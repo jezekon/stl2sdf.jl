@@ -13,13 +13,14 @@ using stl2sdf.DataExport
 
     if RUN_lin_beam
       taskName = "beam-approx"
-      N = 100  # Number of cells along the longest side
+      N = 40  # Number of cells along the longest side
 
       # Data from stl:
       (X, IEN) = import_stl("../data/$(taskName).stl") # -> Vector of vectors
       # (X, IEN) = import_stl("data/$(taskName).stl")
       
       # Data from Tetgen
+      run_tetgen("beam-approx", "../data")  # Run in specified directory
       (X_tet, IEN_tet) = import_tetgen_mesh("../data/$(taskName).1") # -> Vector of vectors
       # (X_tet, IEN_tet) = import_tetgen_mesh("data/$(taskName).1")
 
