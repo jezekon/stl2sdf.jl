@@ -1,6 +1,6 @@
 module DataExport
    
-export SelectProjectedNodes, exportToVTU, exportStructuredPointsToVTK, InputDataToVTU
+export SelectProjectedNodes, exportToVTU, exportStructuredPointsToVTK
 
 using Statistics
 using LinearAlgebra
@@ -11,6 +11,5 @@ using stl2sdf.MeshGrid
 include("DataPostProcess.jl")
 include("ExportToVTU.jl")
 include("ExportToVTK.jl")
-include("InputDataToVTU.jl")
 
 end
