@@ -9,11 +9,35 @@ using stl2sdf.DataExport
 
 @testset "stl2sdf.jl" begin
     # Test configuration flags
-    RUN_lin_beam = true
+    Import_beam = false
+    Import_bunny = true
+    RUN_lin_beam = false
+    
+    #NOTE:
+    if Import_beam
+      taskName = "beam-approx"
 
+      @time (X, IEN) = import_stl("../data/$(taskName).stl") # -> Vector of vectors
+      println(typeof(X))
+      println(size(X))
+      println(X[1])
+      println(typeof(IEN))
+      println(size(IEN))
+      println(IEN[1])
+    end
+
+    #NOTE:
+    if Import_bunny
+      # taskName = "StanfordBunny_small"
+      taskName = "StanfordBunny_large"
+
+      @time (X, IEN) = import_stl("../data/$(taskName).stl") # -> Vector of vectors
+    end
+
+    #NOTE:
     if RUN_lin_beam
-      # taskName = "beam-approx"
-      taskName = "StanfordBunny_small"
+      taskName = "beam-approx"
+      # taskName = "StanfordBunny_small"
 
       N = 120  # Number of cells along the longest side
 
