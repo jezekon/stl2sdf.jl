@@ -1,4 +1,3 @@
-
 function exportStructuredPointsToVTK(
     fileName::String,
     grid::Grid,
