@@ -142,7 +142,7 @@ function rbf_interpolation_kdtree(fine_grid::Array, coarse_grid::Array, weights_
 end
 
 # Adjust the level-set function to maintain the volume
-function LS_Thresholdd(sdf::Array, grid::Array, mesh::Mesh, Exp::Int)
+function LS_Threshold(sdf::Array, grid::Array, mesh::Mesh, Exp::Int)
   # Calculate target volume from mesh properties
   target_volume = mesh.V_domain
     
@@ -166,7 +166,7 @@ function LS_Thresholdd(sdf::Array, grid::Array, mesh::Mesh, Exp::Int)
     # Calculate current volume using the SDF function
     current_volume = calculate_volume_from_sdf(shifted_sdf, grid)
 
-    println(current_volume)
+    # println(current_volume)
       
     # Adjust threshold based on calculated volume
     eps = abs(target_volume - current_volume)
@@ -236,7 +236,7 @@ function RBFs_smoothing(
   println("Computing the LSF zero level to meet the volume condition...")
   @time LSF = rbf_interpolation_kdtree(coarse_grid, coarse_grid, weights, kernel)
   LSF_array = vector_to_array(LSF, my_grid.N .+ 1) # data modification: vector -> array
-  th = LS_Thresholdd(LSF_array, coarse_grid, mesh, 4)
+  th = LS_Threshold(LSF_array, coarse_grid, mesh, 4)
 
   println("Computing $name on the fine grid...")
   @time fine_LSF = rbf_interpolation_kdtree(fine_grid, coarse_grid, weights, kernel)
