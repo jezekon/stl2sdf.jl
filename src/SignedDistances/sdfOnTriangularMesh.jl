@@ -143,7 +143,7 @@ function evalDistancesOnTriMesh(mesh::TriangularMesh, grid::Grid, points::Matrix
     dist_local = [fill(big, ngp) for _ in 1:nthreads]
     xp_local = [zeros(nsd, ngp) for _ in 1:nthreads]
 
-    p_elements = Progress(nel, 1, "Processing elements: ", 30)
+    p_elements = Progress(nel, 1, "Computing distance: ", 30)
 
     # Atomic countery pro oba cykly
     counter_elements = Atomic{Int}(0)
@@ -224,6 +224,7 @@ function evalDistancesOnTriMesh(mesh::TriangularMesh, grid::Grid, points::Matrix
         end
       end
     end
+    finish!(p_elements)
 
     # Merging the results after parallel calculation:
     for i in 1:ngp
