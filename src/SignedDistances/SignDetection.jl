@@ -34,6 +34,59 @@ function is_point_inside_aabb(x::SubArray, min_bounds, max_bounds)
   return all(min_bounds .<= x) && all(x .<= max_bounds)
 end
 
+
+function is_point_in_tetrahedron_halfspace(tetrahedron, point)
+    # For each face of the tetrahedron
+    for i in 1:4
+        # Get face vertices (skipping the i-th vertex)
+        vertices = [tetrahedron[:, j] for j in 1:4 if j != i]
+        
+        # Compute face normal pointing inward
+        v1, v2, v3 = vertices
+        normal = cross(v2 - v1, v3 - v1)
+        
+        # Ensure normal points inward (toward remaining vertex)
+        remaining_vertex = tetrahedron[:, i]
+        if dot(normal, remaining_vertex - v1) < 0
+            normal = -normal
+        end
+        
+        # Check if point is on the correct side of this face
+        if dot(normal, point - v1) < 0
+            return false  # Outside this face's half-space
+        end
+    end
+    
+    return true  # Inside all half-spaces = inside tetrahedron
+end
+
+function is_point_in_tetrahedron_volume(tetrahedron::Matrix{Float64}, point::Vector{Float64}, tolerance::Float64=1e-10)
+    # Original tetrahedron vertices
+    v1 = tetrahedron[:, 1]
+    v2 = tetrahedron[:, 2]
+    v3 = tetrahedron[:, 3]
+    v4 = tetrahedron[:, 4]
+    
+    # Volume of original tetrahedron
+    original_volume = signed_tet_volume(v1, v2, v3, v4)
+    
+    # For each face, create a tetrahedron with the query point
+    volumes = [
+        signed_tet_volume(point, v2, v3, v4),
+        signed_tet_volume(v1, point, v3, v4),
+        signed_tet_volume(v1, v2, point, v4),
+        signed_tet_volume(v1, v2, v3, point)
+    ]
+    
+    # If all volumes have the same sign as the original and sum to it
+    # (allowing for floating point error), point is inside
+    same_sign = all(sign(vol) == sign(original_volume) for vol in volumes)
+    volumes_sum = sum(volumes)
+    sum_approx = abs(volumes_sum - original_volume) < tolerance * abs(original_volume)
+    
+    return same_sign && sum_approx
+end
+
 # Main function for sign detection:
 function SignDetection(mesh::Mesh, grid::Grid, points::Matrix)
     X = mesh.X
@@ -69,7 +122,9 @@ function SignDetection(mesh::Mesh, grid::Grid, points::Matrix)
             tetrahedron = X[:, IEN[:, el]]
             
             # Check if point is inside tetrahedron using barycentric coordinates
-            if is_point_in_tetrahedron(tetrahedron, x)
+            # if is_point_in_tetrahedron(tetrahedron, x)
+            # if is_point_in_tetrahedron_halfspace(tetrahedron, x)
+            if is_point_in_tetrahedron_volume(tetrahedron, x)
                 signs[i] = 1.0
                 break  # Exit element loop once we find a containing element
             end
