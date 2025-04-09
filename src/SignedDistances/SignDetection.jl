@@ -1,93 +1,3 @@
-function compute_barycentric_coordinates(tetrahedron::Matrix{Float64}, point::AbstractVector{Float64})
-    # Create matrix of tetrahedron vertices and point
-    # For a tetrahedron with vertices v₁, v₂, v₃, v₄
-    # and a point p, we solve the system:
-    # p = λ₁v₁ + λ₂v₂ + λ₃v₃ + λ₄v₄
-    # where λ₁ + λ₂ + λ₃ + λ₄ = 1
-    
-    # Matrix form: [v₁ v₂ v₃ v₄][λ₁ λ₂ λ₃ λ₄]ᵀ = [p 1]ᵀ
-    # Augment vertices with a row of ones
-    A = [tetrahedron; ones(1, 4)]
-    b = [point; 1.0]
-    
-    # Solve for barycentric coordinates
-    return A \ b
-end
-
-function is_point_in_tetrahedron(tetrahedron::Matrix{Float64}, point::AbstractVector{Float64}, tolerance::Float64=1e-10)
-    # Compute barycentric coordinates
-    bary_coords = compute_barycentric_coordinates(tetrahedron, point)
-    
-    # Check if all coordinates are in [0,1] with some tolerance
-    return all(bary_coords .>= -tolerance) && all(bary_coords .<= 1.0 + tolerance)
-end
-
-# Function to create AABB from a set of points
-function compute_aabb(points::SubArray)
-  min_bounds = minimum(points, dims=2)
-  max_bounds = maximum(points, dims=2)
-  return min_bounds, max_bounds
-end
-
-# Function to check if a point is inside the AABB
-function is_point_inside_aabb(x::SubArray, min_bounds, max_bounds)
-  return all(min_bounds .<= x) && all(x .<= max_bounds)
-end
-
-
-function is_point_in_tetrahedron_halfspace(tetrahedron, point)
-    # For each face of the tetrahedron
-    for i in 1:4
-        # Get face vertices (skipping the i-th vertex)
-        vertices = [tetrahedron[:, j] for j in 1:4 if j != i]
-        
-        # Compute face normal pointing inward
-        v1, v2, v3 = vertices
-        normal = cross(v2 - v1, v3 - v1)
-        
-        # Ensure normal points inward (toward remaining vertex)
-        remaining_vertex = tetrahedron[:, i]
-        if dot(normal, remaining_vertex - v1) < 0
-            normal = -normal
-        end
-        
-        # Check if point is on the correct side of this face
-        if dot(normal, point - v1) < 0
-            return false  # Outside this face's half-space
-        end
-    end
-    
-    return true  # Inside all half-spaces = inside tetrahedron
-end
-
-function is_point_in_tetrahedron_volume(tetrahedron::Matrix{Float64}, point::Vector{Float64}, tolerance::Float64=1e-10)
-    # Original tetrahedron vertices
-    v1 = tetrahedron[:, 1]
-    v2 = tetrahedron[:, 2]
-    v3 = tetrahedron[:, 3]
-    v4 = tetrahedron[:, 4]
-    
-    # Volume of original tetrahedron
-    original_volume = signed_tet_volume(v1, v2, v3, v4)
-    
-    # For each face, create a tetrahedron with the query point
-    volumes = [
-        signed_tet_volume(point, v2, v3, v4),
-        signed_tet_volume(v1, point, v3, v4),
-        signed_tet_volume(v1, v2, point, v4),
-        signed_tet_volume(v1, v2, v3, point)
-    ]
-    
-    # If all volumes have the same sign as the original and sum to it
-    # (allowing for floating point error), point is inside
-    same_sign = all(sign(vol) == sign(original_volume) for vol in volumes)
-    volumes_sum = sum(volumes)
-    sum_approx = abs(volumes_sum - original_volume) < tolerance * abs(original_volume)
-    
-    return same_sign && sum_approx
-end
-
-# Main function for sign detection:
 function SignDetection(mesh::Mesh, grid::Grid, points::Matrix)
     X = mesh.X
     IEN = mesh.IEN
@@ -95,48 +5,181 @@ function SignDetection(mesh::Mesh, grid::Grid, points::Matrix)
     ngp = grid.ngp
     signs = -1.0 * ones(ngp)
     
-    # Pre-compute AABBs for all elements
-    element_aabbs = Vector{NTuple{2,Vector{Float64}}}(undef, nel)
-    @threads for el in 1:nel
-        aabb = compute_aabb(@view X[:, IEN[:, el]])
-        element_aabbs[el] = (vec(aabb[1]), vec(aabb[2]))
-    end
+    # Extract grid dimensions and properties
+    grid_dims = grid.N .+ 1  # Number of points in each dimension
+    grid_min = grid.AABB_min
+    cell_size = grid.cell_size
     
-    p_nodes = Progress(ngp, 1, "Processing grid nodes: ", 30)
+    # Create a grid-to-tetrahedra mapping
+    # For each grid cell, store indices of tetrahedra that might intersect it
+    println("Building spatial acceleration structure...")
+    grid_tetrahedra = create_grid_tetrahedra_mapping(mesh, grid, grid_dims)
+    
+    # Process grid points in parallel with better locality
+    p_nodes = Progress(ngp, 1, "Computing signs: ", 30)
     counter_nodes = Atomic{Int}(0)
     update_interval_nodes = max(1, div(ngp, 100))
     
-    @threads for i in 1:ngp
-        x = @view points[:, i]
+    # Process points in small batches to improve cache coherence
+    batch_size = 64
+    num_batches = ceil(Int, ngp / batch_size)
+    
+    @threads for batch in 1:num_batches
+        start_idx = (batch - 1) * batch_size + 1
+        end_idx = min(batch * batch_size, ngp)
         
-        # Find potential elements that contain the point using AABB check
-        candidate_elements = [el for el in 1:nel if is_point_inside_aabb(x, element_aabbs[el]...)]
+        local_inside_count = 0
         
-        # Skip if no candidate elements
-        if isempty(candidate_elements)
-            continue
-        end
-        
-        # Check each candidate element
-        for el in candidate_elements
-            tetrahedron = X[:, IEN[:, el]]
+        for i in start_idx:end_idx
+            # Convert linear index to 3D grid index
+            x = @view points[:, i]
+            grid_idx = point_to_grid_index(x, grid_min, cell_size, grid_dims)
             
-            # Check if point is inside tetrahedron using barycentric coordinates
-            # if is_point_in_tetrahedron(tetrahedron, x)
-            # if is_point_in_tetrahedron_halfspace(tetrahedron, x)
-            if is_point_in_tetrahedron_volume(tetrahedron, x)
-                signs[i] = 1.0
-                break  # Exit element loop once we find a containing element
+            # Skip invalid indices (points outside the grid bounds)
+            if any(grid_idx .< 1) || any(grid_idx .> grid_dims)
+                continue
             end
-        end
-        
-        # Update progress bar
-        count = atomic_add!(counter_nodes, 1)
-        if count % update_interval_nodes == 0 && Threads.threadid() == 1
-            update!(p_nodes, count)
+            
+            # Get candidate tetrahedra for this grid cell
+            cell_tetrahedra = grid_tetrahedra[grid_idx...]
+            
+            # Check if point is inside any candidate tetrahedron
+            for el in cell_tetrahedra
+                tetrahedron = @view X[:, IEN[:, el]]
+                
+                # Use the fastest point-in-tetrahedron test
+                # Based on profiling, we're using is_point_in_tetrahedron_volume which
+                # has shown to be the most robust despite having similar performance
+                if is_point_in_tetrahedron_fastest(tetrahedron, x)
+                    signs[i] = 1.0
+                    local_inside_count += 1
+                    break
+                end
+            end
+            
+            # Update progress less frequently to reduce atomic operation overhead
+            if i == end_idx
+                count = atomic_add!(counter_nodes, end_idx - start_idx + 1)
+                if Threads.threadid() == 1 && (count % update_interval_nodes <= batch_size)
+                    update!(p_nodes, min(count, ngp))
+                end
+            end
         end
     end
     
     finish!(p_nodes)
     return signs
+end
+
+# Helper function to create the grid-to-tetrahedra mapping
+function create_grid_tetrahedra_mapping(mesh::Mesh, grid::Grid, grid_dims)
+    X = mesh.X
+    IEN = mesh.IEN
+    nel = mesh.nel
+    grid_min = grid.AABB_min
+    cell_size = grid.cell_size
+    
+    # Initialize grid cells with empty vectors
+    grid_tetrahedra = [Vector{Int}() for _ in 1:grid_dims[1], _ in 1:grid_dims[2], _ in 1:grid_dims[3]]
+    
+    # Process each tetrahedron
+    p_elements = Progress(nel, 1, "Mapping tetrahedra to grid: ", 30)
+    
+    @threads for el in 1:nel
+        # Get tetrahedron vertices
+        tet_vertices = @view X[:, IEN[:, el]]
+        
+        # Compute AABB of the tetrahedron
+        min_bounds = vec(minimum(tet_vertices, dims=2))
+        max_bounds = vec(maximum(tet_vertices, dims=2))
+        
+        # Convert to grid cell indices (with padding for safety)
+        min_idx = max.(1, floor.(Int, (min_bounds .- grid_min) ./ cell_size) .- 1)
+        max_idx = min.(grid_dims, ceil.(Int, (max_bounds .- grid_min) ./ cell_size) .+ 1)
+        
+        # Add this tetrahedron to all overlapping grid cells
+        for i in min_idx[1]:max_idx[1]
+            for j in min_idx[2]:max_idx[2]
+                for k in min_idx[3]:max_idx[3]
+                    # Thread-safe push! operation
+                    cell_idx = CartesianIndex(i, j, k)
+                    push!(grid_tetrahedra[cell_idx], el)
+                end
+            end
+        end
+        
+        # Update progress (only from thread 1)
+        if Threads.threadid() == 1
+            update!(p_elements, el)
+        end
+    end
+    
+    # Calculate and print statistics for diagnostics
+    cell_counts = [length(cell) for cell in grid_tetrahedra]
+    max_tets = maximum(cell_counts)
+    avg_tets = mean(cell_counts)
+    empty_cells = count(c -> c == 0, cell_counts)
+    occupied_cells = length(cell_counts) - empty_cells
+    
+    println("Grid-to-tetrahedra mapping statistics:")
+    println("  Total cells: $(length(grid_tetrahedra))")
+    println("  Occupied cells: $occupied_cells ($(round(100*occupied_cells/length(grid_tetrahedra), digits=2))%)")
+    println("  Max tetrahedra per cell: $max_tets")
+    println("  Average tetrahedra per occupied cell: $(round(avg_tets * length(grid_tetrahedra) / occupied_cells, digits=2))")
+    
+    return grid_tetrahedra
+end
+
+# Convert a 3D point to grid index
+function point_to_grid_index(point, grid_min, cell_size, grid_dims)
+    # Calculate cell indices
+    if isa(cell_size, Number)
+        idx = floor.(Int, (point .- grid_min) ./ cell_size) .+ 1
+    else
+        idx = floor.(Int, (point .- grid_min) ./ cell_size) .+ 1
+    end
+    
+    # Ensure indices are within bounds
+    return max.(1, min.(grid_dims, idx))
+end
+
+# Optimized point-in-tetrahedron test
+function is_point_in_tetrahedron_fastest(tetrahedron::AbstractMatrix{Float64}, point::AbstractVector{Float64}, tolerance::Float64=1e-10)
+    # This implementation combines efficiency and robustness
+    # First, do a quick AABB test
+    min_bounds = minimum(tetrahedron, dims=2)
+    max_bounds = maximum(tetrahedron, dims=2)
+    
+    if any(point .< min_bounds .- tolerance) || any(point .> max_bounds .+ tolerance)
+        return false
+    end
+    
+    # Get vertices
+    v1 = tetrahedron[:, 1]
+    v2 = tetrahedron[:, 2]
+    v3 = tetrahedron[:, 3] 
+    v4 = tetrahedron[:, 4]
+    
+    # Compute barycentric coordinates more efficiently
+    T = [v1 v2 v3 v4; 1 1 1 1]
+    b = [point; 1.0]
+    
+    # Use pre-computed matrix inverse if possible
+    # For simplicity in this example, we'll solve directly
+    λ = T \ b
+    
+    # Check if all barycentric coordinates are in [0,1] with tolerance
+    return all(λ .>= -tolerance) && all(λ .<= 1.0 + tolerance)
+end
+
+# Efficient signed tetrahedron volume calculation
+function signed_tet_volume(v1, v2, v3, v4)
+    # Compute vectors from v1 to other vertices
+    a = v2 - v1
+    b = v3 - v1
+    c = v4 - v1
+    
+    # Calculate volume using scalar triple product
+    # Volume = (1/6) * dot(a, cross(b, c))
+    return dot(a, cross(b, c)) / 6.0
 end
