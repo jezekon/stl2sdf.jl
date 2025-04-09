@@ -60,25 +60,39 @@ end
 
 # Compute sparse kernel matrix for efficient operations
 function compute_sparse_kernel_matrix(grid, kernel::LimitedRangeRBFKernel)
-  n = length(grid)
+  # Převedení grid na jednu matici pro KDTree
+  points = reduce(hcat, grid)
+  
+  # Vypočítání mezního poloměru interakce
+  interaction_radius = kernel.σ * sqrt(-log(kernel.threshold))
+  
+  # Vytvoření KD-stromu pro efektivní vyhledávání sousedů
+  kdtree = KDTree(points)
+  
   I, J, V = Int[], Int[], Float32[]
-
-  for i in 1:n
-    for j in i:n  # Utilize symmetry, compute only upper triangle
-      value = Float32(kernel(grid[i], grid[j]))  # Convert to Float32
-      if value > kernel.threshold
-        push!(I, i)
-        push!(J, j)
-        push!(V, value)
-        if i != j
-          push!(I, j)
-          push!(J, i)
+  
+  for i in 1:size(points, 2)
+    # Najít všechny body v rámci interaction_radius
+    idxs = inrange(kdtree, points[:, i], interaction_radius)
+    
+    for j in idxs
+      if j >= i  # Zabránit duplicitním výpočtům
+        value = Float32(kernel(grid[i], grid[j]))
+        if value > kernel.threshold
+          push!(I, i)
+          push!(J, j)
           push!(V, value)
+          if i != j
+            push!(I, j)
+            push!(J, i)
+            push!(V, value)
+          end
         end
       end
     end
   end
-  return sparse(I, J, V, n, n)
+  
+  return sparse(I, J, V, length(grid), length(grid))
 end
 
 # Compute RBF weights on the coarse grid
