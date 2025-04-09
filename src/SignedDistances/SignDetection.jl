@@ -1,3 +1,20 @@
+"""
+    SignDetection(mesh::Mesh, grid::Grid, points::Matrix) -> Vector{Float64}
+
+Determine whether each point in a grid is inside or outside a tetrahedral mesh.
+
+This function assigns a sign (+1 or -1) to each grid point based on whether it is 
+inside (+1) or outside (-1) the tetrahedral mesh. It uses spatial acceleration 
+structures for efficiency and parallel processing for speed.
+
+# Arguments
+- `mesh::Mesh`: The tetrahedral mesh to check against
+- `grid::Grid`: The grid structure defining the domain
+- `points::Matrix`: Matrix of point coordinates (3×n format)
+
+# Returns
+- `Vector{Float64}`: Vector of signs (+1 for inside, -1 for outside)
+"""
 function SignDetection(mesh::Mesh, grid::Grid, points::Matrix)
     X = mesh.X
     IEN = mesh.IEN
@@ -11,7 +28,6 @@ function SignDetection(mesh::Mesh, grid::Grid, points::Matrix)
     cell_size = grid.cell_size
     
     # Create a grid-to-tetrahedra mapping
-    # For each grid cell, store indices of tetrahedra that might intersect it
     println("Building spatial acceleration structure...")
     grid_tetrahedra = create_grid_tetrahedra_mapping(mesh, grid, grid_dims)
     
@@ -27,8 +43,6 @@ function SignDetection(mesh::Mesh, grid::Grid, points::Matrix)
     @threads for batch in 1:num_batches
         start_idx = (batch - 1) * batch_size + 1
         end_idx = min(batch * batch_size, ngp)
-        
-        local_inside_count = 0
         
         for i in start_idx:end_idx
             # Convert linear index to 3D grid index
@@ -47,12 +61,8 @@ function SignDetection(mesh::Mesh, grid::Grid, points::Matrix)
             for el in cell_tetrahedra
                 tetrahedron = @view X[:, IEN[:, el]]
                 
-                # Use the fastest point-in-tetrahedron test
-                # Based on profiling, we're using is_point_in_tetrahedron_volume which
-                # has shown to be the most robust despite having similar performance
                 if is_point_in_tetrahedron_fastest(tetrahedron, x)
                     signs[i] = 1.0
-                    local_inside_count += 1
                     break
                 end
             end
@@ -71,6 +81,23 @@ function SignDetection(mesh::Mesh, grid::Grid, points::Matrix)
     return signs
 end
 
+"""
+    create_grid_tetrahedra_mapping(mesh::Mesh, grid::Grid, grid_dims) -> Array{Vector{Int}}
+
+Create a spatial acceleration structure that maps grid cells to potentially overlapping tetrahedra.
+
+This function builds an efficient spatial mapping that allows quick identification of which
+tetrahedra might contain a given point, greatly reducing the number of point-in-tetrahedron
+tests needed.
+
+# Arguments
+- `mesh::Mesh`: The tetrahedral mesh
+- `grid::Grid`: The grid structure
+- `grid_dims`: Dimensions of the grid
+
+# Returns
+- `Array{Vector{Int}}`: 3D array where each cell contains indices of potentially overlapping tetrahedra
+"""
 function create_grid_tetrahedra_mapping(mesh::Mesh, grid::Grid, grid_dims)
     X = mesh.X
     IEN = mesh.IEN
@@ -137,7 +164,6 @@ function create_grid_tetrahedra_mapping(mesh::Mesh, grid::Grid, grid_dims)
     # Calculate and print statistics for diagnostics
     cell_counts = [length(cell) for cell in grid_tetrahedra]
     max_tets = maximum(cell_counts)
-    avg_tets = mean(cell_counts)
     empty_cells = count(c -> c == 0, cell_counts)
     occupied_cells = length(cell_counts) - empty_cells
     
@@ -151,7 +177,20 @@ function create_grid_tetrahedra_mapping(mesh::Mesh, grid::Grid, grid_dims)
     return grid_tetrahedra
 end
 
-# Convert a 3D point to grid index
+"""
+    point_to_grid_index(point, grid_min, cell_size, grid_dims) -> Vector{Int}
+
+Convert a 3D point to grid indices.
+
+# Arguments
+- `point`: The 3D point coordinates
+- `grid_min`: Minimum coordinates of the grid
+- `cell_size`: Size of grid cells (scalar or vector)
+- `grid_dims`: Dimensions of the grid
+
+# Returns
+- `Vector{Int}`: 3D index of the grid cell containing the point
+"""
 function point_to_grid_index(point, grid_min, cell_size, grid_dims)
     # Calculate cell indices
     if isa(cell_size, Number)
@@ -164,10 +203,24 @@ function point_to_grid_index(point, grid_min, cell_size, grid_dims)
     return max.(1, min.(grid_dims, idx))
 end
 
-# Optimized point-in-tetrahedron test
+"""
+    is_point_in_tetrahedron_fastest(tetrahedron, point, tolerance=1e-10) -> Bool
+
+Efficiently check if a point is inside a tetrahedron.
+
+This optimized function uses a combination of AABB testing and barycentric coordinates
+to determine if a point lies inside a tetrahedron.
+
+# Arguments
+- `tetrahedron`: Matrix of tetrahedron vertex coordinates (3×4)
+- `point`: The point to test (3D vector)
+- `tolerance`: Numerical tolerance for boundary cases
+
+# Returns
+- `Bool`: True if the point is inside the tetrahedron, false otherwise
+"""
 function is_point_in_tetrahedron_fastest(tetrahedron::AbstractMatrix{Float64}, point::AbstractVector{Float64}, tolerance::Float64=1e-10)
-    # This implementation combines efficiency and robustness
-    # First, do a quick AABB test
+    # Quick AABB test
     min_bounds = minimum(tetrahedron, dims=2)
     max_bounds = maximum(tetrahedron, dims=2)
     
@@ -181,26 +234,13 @@ function is_point_in_tetrahedron_fastest(tetrahedron::AbstractMatrix{Float64}, p
     v3 = tetrahedron[:, 3] 
     v4 = tetrahedron[:, 4]
     
-    # Compute barycentric coordinates more efficiently
+    # Compute barycentric coordinates
     T = [v1 v2 v3 v4; 1 1 1 1]
     b = [point; 1.0]
     
-    # Use pre-computed matrix inverse if possible
-    # For simplicity in this example, we'll solve directly
+    # Solve the linear system
     λ = T \ b
     
-    # Check if all barycentric coordinates are in [0,1] with tolerance
+    # Point is inside if all barycentric coordinates are in [0,1] with tolerance
     return all(λ .>= -tolerance) && all(λ .<= 1.0 + tolerance)
-end
-
-# Efficient signed tetrahedron volume calculation
-function signed_tet_volume(v1, v2, v3, v4)
-    # Compute vectors from v1 to other vertices
-    a = v2 - v1
-    b = v3 - v1
-    c = v4 - v1
-    
-    # Calculate volume using scalar triple product
-    # Volume = (1/6) * dot(a, cross(b, c))
-    return dot(a, cross(b, c)) / 6.0
 end

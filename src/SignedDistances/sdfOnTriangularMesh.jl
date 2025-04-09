@@ -1,70 +1,21 @@
-# Selection of regular grid points that have been projected:
-function SelectProjectedNodes(
-  mesh::TriangularMesh,
-  grid::Grid,
-  xp::Matrix{Float64},
-  points::Matrix{Float64})
+"""
+    evalDistancesOnTriMesh(mesh::TriangularMesh, grid::Grid, points::Matrix{Float64})
 
-  ngp = grid.ngp # number of nodes in grid
-  nsd = mesh.nsd # number of spacial dimensions
+Compute the unsigned distance field from a regular grid to a triangular mesh surface.
 
-  # Assuming ngp is defined somewhere in your code
-  # Preallocate arrays with maximum possible size
-  max_size = ngp * 2  # Adjust this based on your knowledge of the data
-  X = [zeros(Float64, nsd) for _ in 1:max_size]
-  Xp = [zeros(Float64, nsd) for _ in 1:max_size]
+This function efficiently computes the minimum distance from each grid point to the
+triangular mesh surface using spatial acceleration structures (KD-trees) to avoid
+checking all triangles for each point.
 
-  count = 0
-  for i = 1:ngp
-    if sum(abs.(xp[:, i])) > 1.0e-10
-      count += 1
-      X[count] = points[:, i]
-      Xp[count] = xp[:, i]
-    end
-  end
+# Arguments
+- `mesh::TriangularMesh`: The triangular mesh representing the surface
+- `grid::Grid`: The regular grid structure defining the domain
+- `points::Matrix{Float64}`: Matrix of grid point coordinates (3×ngp)
 
-  # If count is 0, indicating no points were added, handle gracefully
-  if count == 0
-    # println("WARNING: no projected points!")
-    return [], [], NaN, NaN
-  end
-
-  # Trim the unused preallocated space
-  X = resize!(X, count)
-  Xp = resize!(Xp, count)
-
-  # Mean and max projected distance:
-  mean_PD = mean(norm.(X - Xp))
-  max_PD = maximum(norm.(X - Xp))
-
-  return X, Xp, mean_PD, max_PD
-end
-
-function barycentricCoordinates(
-  x₁::Vector{Float64}, # coordinates of vertex one of the triangle
-  x₂::Vector{Float64}, # coordinates of vertex two of the triangle
-  x₃::Vector{Float64}, # coordinates of vertex tree of the triangle
-  n::Vector{Float64},  # unit normal to the face of the triangle
-  x)  # one node of the grid
-
-    A = [
-        (x₁[2]*n[3]-x₁[3]*n[2]) (x₂[2]*n[3]-x₂[3]*n[2]) (x₃[2]*n[3]-x₃[3]*n[2])
-        (x₁[3]*n[1]-x₁[1]*n[3]) (x₂[3]*n[1]-x₂[1]*n[3]) (x₃[3]*n[1]-x₃[1]*n[3])
-        (x₁[1]*n[2]-x₁[2]*n[1]) (x₂[1]*n[2]-x₂[2]*n[1]) (x₃[1]*n[2]-x₃[2]*n[1])
-    ]
-    b = [
-        x[2] * n[3] - x[3] * n[2],
-        x[3] * n[1] - x[1] * n[3],
-        x[1] * n[2] - x[2] * n[1],
-    ]
-    
-    n_max, i_max = findmax(abs.(n)) ##???
-    A[i_max, :] = [1.0 1.0 1.0]
-    b[i_max] = 1.0
-
-    return λ = A \ b # barycentric coordinates
-end
-
+# Returns
+- `dist::Vector{Float64}`: Vector of unsigned distances from each grid point to the mesh surface
+- `xp::Matrix{Float64}`: Matrix of closest point projections on the mesh for each grid point (3×ngp)
+"""
 function evalDistancesOnTriMesh(mesh::TriangularMesh, grid::Grid, points::Matrix{Float64})
     println("Building accelerated spatial structure...")
     # Convert the triangular mesh into a format suitable for KD-tree operations
@@ -248,41 +199,129 @@ function evalDistancesOnTriMesh(mesh::TriangularMesh, grid::Grid, points::Matrix
         end
     end
     
-    # INFO: Analyze and export results:
-    #
-    # Xg, Xp, mean_PD, max_PD = SelectProjectedNodes(mesh, grid, xp, points)
-    # println("Mean of projected distance: ", mean_PD)
-    # println("Maximum projected distance: ", max_PD)
-    #
-    # # Export visualization files
-    # if !isempty(Xg) && !isempty(Xp)
-    #     nnp = size(Xg, 1)
-    #
-    #     IEN = [[i; i + nnp] for i = 1:nnp]
-    #     X = vcat(Xg, Xp)
-    #
-    #     stl2sdf.exportToVTU("lines_STL.vtu", X, IEN, 3)
-    #
-    #     IEN = [[i] for i = 1:nnp]
-    #     stl2sdf.exportToVTU("Xg_STL.vtu", Xg, IEN, 1)
-    #     stl2sdf.exportToVTU("Xp_STL.vtu", Xp, IEN, 1)
-    # end
-    
     return dist, xp
 end
 
-# Helper struct to store preprocessed triangle data
-struct TriangleData
-    vertices::Vector{Vector{Float64}}
-    edges::Vector{Vector{Float64}}
-    edge_lengths::Vector{Float64}
-    normal::Vector{Float64}
-    center::Vector{Float64}
-    aabb_min::Vector{Float64}
-    aabb_max::Vector{Float64}
+"""
+    barycentricCoordinates(x₁, x₂, x₃, n, x)
+
+Compute barycentric coordinates of point x with respect to triangle with vertices x₁, x₂, x₃.
+
+# Arguments
+- `x₁::Vector{Float64}`: First vertex of the triangle
+- `x₂::Vector{Float64}`: Second vertex of the triangle
+- `x₃::Vector{Float64}`: Third vertex of the triangle
+- `n::Vector{Float64}`: Unit normal to the triangle face
+- `x::Vector{Float64}`: Point for which to compute barycentric coordinates
+
+# Returns
+- `λ::Vector{Float64}`: Barycentric coordinates [λ₁, λ₂, λ₃]
+"""
+function barycentricCoordinates(
+    x₁::Vector{Float64}, # First vertex of the triangle
+    x₂::Vector{Float64}, # Second vertex of the triangle
+    x₃::Vector{Float64}, # Third vertex of the triangle
+    n::Vector{Float64},  # Unit normal to the triangle face
+    x)                  # Point for which to compute barycentric coordinates
+
+    # Matrix for solving the barycentric coordinates
+    A = [
+        (x₁[2]*n[3]-x₁[3]*n[2]) (x₂[2]*n[3]-x₂[3]*n[2]) (x₃[2]*n[3]-x₃[3]*n[2])
+        (x₁[3]*n[1]-x₁[1]*n[3]) (x₂[3]*n[1]-x₂[1]*n[3]) (x₃[3]*n[1]-x₃[1]*n[3])
+        (x₁[1]*n[2]-x₁[2]*n[1]) (x₂[1]*n[2]-x₂[2]*n[1]) (x₃[1]*n[2]-x₃[2]*n[1])
+    ]
+    
+    # Right-hand side vector
+    b = [
+        x[2] * n[3] - x[3] * n[2],
+        x[3] * n[1] - x[1] * n[3],
+        x[1] * n[2] - x[2] * n[1],
+    ]
+    
+    # Find the component with maximum normal value for numerical stability
+    n_max, i_max = findmax(abs.(n))
+    A[i_max, :] = [1.0 1.0 1.0]
+    b[i_max] = 1.0
+
+    # Solve the system to get barycentric coordinates
+    return λ = A \ b
 end
 
-# Preprocess triangle mesh to extract and cache useful properties
+"""
+    SelectProjectedNodes(mesh, grid, xp, points)
+
+Select the grid points that have been successfully projected onto the mesh surface.
+This is useful for post-processing and visualization of the projection results.
+
+# Arguments
+- `mesh::TriangularMesh`: The triangular mesh
+- `grid::Grid`: The regular grid structure
+- `xp::Matrix{Float64}`: Matrix of projected points on the mesh (3×ngp)
+- `points::Matrix{Float64}`: Matrix of original grid points (3×ngp)
+
+# Returns
+- `X::Vector{Vector{Float64}}`: Vector of grid points that have been projected
+- `Xp::Vector{Vector{Float64}}`: Vector of corresponding projected points on the mesh
+- `mean_PD::Float64`: Mean projection distance
+- `max_PD::Float64`: Maximum projection distance
+"""
+function SelectProjectedNodes(
+    mesh::TriangularMesh,
+    grid::Grid,
+    xp::Matrix{Float64},
+    points::Matrix{Float64})
+
+    ngp = grid.ngp # number of nodes in grid
+    nsd = mesh.nsd # number of spatial dimensions
+
+    # Initialize arrays to store valid projection pairs
+    X = Vector{Vector{Float64}}()
+    Xp = Vector{Vector{Float64}}()
+
+    # Select points with valid projections (non-zero)
+    for i = 1:ngp
+        if sum(abs.(xp[:, i])) > 1.0e-10
+            push!(X, points[:, i])
+            push!(Xp, xp[:, i])
+        end
+    end
+
+    # If no points were projected, return empty results with NaN statistics
+    if isempty(X)
+        return X, Xp, NaN, NaN
+    end
+
+    # Calculate projection distance statistics
+    distances = [norm(X[i] - Xp[i]) for i in 1:length(X)]
+    mean_PD = mean(distances)
+    max_PD = maximum(distances)
+
+    return X, Xp, mean_PD, max_PD
+end
+
+# Helper struct to store preprocessed triangle data for efficient distance calculations
+struct TriangleData
+    vertices::Vector{Vector{Float64}}  # Triangle vertices [v₁, v₂, v₃]
+    edges::Vector{Vector{Float64}}     # Edge vectors [e₁, e₂, e₃]
+    edge_lengths::Vector{Float64}      # Length of each edge
+    normal::Vector{Float64}            # Unit normal to the triangle face
+    center::Vector{Float64}            # Center point of the triangle
+    aabb_min::Vector{Float64}          # Minimum corner of axis-aligned bounding box
+    aabb_max::Vector{Float64}          # Maximum corner of axis-aligned bounding box
+end
+
+"""
+    prepare_triangle_data(mesh::TriangularMesh)
+
+Preprocess the triangular mesh to extract and cache useful properties for each triangle.
+This significantly speeds up distance calculations by avoiding redundant computations.
+
+# Arguments
+- `mesh::TriangularMesh`: The triangular mesh
+
+# Returns
+- `Vector{TriangleData}`: Vector of preprocessed triangle data
+"""
 function prepare_triangle_data(mesh::TriangularMesh)
     triangle_data = Vector{TriangleData}(undef, mesh.nel)
     
@@ -327,7 +366,21 @@ function prepare_triangle_data(mesh::TriangularMesh)
     return triangle_data
 end
 
-# Efficient check if a point is within range of an AABB
+"""
+    point_in_box_range(point, box_min, box_max, max_dist)
+
+Check if a point is within a specified distance of an axis-aligned bounding box (AABB).
+This is used for quick rejection testing before more expensive distance calculations.
+
+# Arguments
+- `point::Vector{Float64}`: The point to test
+- `box_min::Vector{Float64}`: Minimum corner of the AABB
+- `box_max::Vector{Float64}`: Maximum corner of the AABB
+- `max_dist::Float64`: Maximum distance to consider
+
+# Returns
+- `Bool`: True if the point is within range of the AABB, false otherwise
+"""
 function point_in_box_range(point, box_min, box_max, max_dist)
     for i in 1:length(point)
         if point[i] < box_min[i] - max_dist || point[i] > box_max[i] + max_dist
@@ -336,5 +389,3 @@ function point_in_box_range(point, box_min, box_max, max_dist)
     end
     return true
 end
-
- 
