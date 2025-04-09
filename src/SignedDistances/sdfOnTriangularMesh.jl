@@ -91,9 +91,6 @@ function evalDistancesOnTriMesh(mesh::TriangularMesh, grid::Grid, points::Matrix
     dist = big * ones(Float64, ngp)
     xp = zeros(Float64, nsd, ngp)
     
-    # Precompute triangle edges for all triangles (improves cache efficiency)
-    EN = NodePosition3D(mesh)
-    
     # Set search radius based on grid cell size 
     # (can be adjusted based on mesh characteristics)
     search_radius = 2.5 * grid.cell_size
