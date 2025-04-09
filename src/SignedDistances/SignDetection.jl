@@ -71,7 +71,6 @@ function SignDetection(mesh::Mesh, grid::Grid, points::Matrix)
     return signs
 end
 
-# Helper function to create the grid-to-tetrahedra mapping
 function create_grid_tetrahedra_mapping(mesh::Mesh, grid::Grid, grid_dims)
     X = mesh.X
     IEN = mesh.IEN
@@ -79,13 +78,21 @@ function create_grid_tetrahedra_mapping(mesh::Mesh, grid::Grid, grid_dims)
     grid_min = grid.AABB_min
     cell_size = grid.cell_size
     
-    # Initialize grid cells with empty vectors
-    grid_tetrahedra = [Vector{Int}() for _ in 1:grid_dims[1], _ in 1:grid_dims[2], _ in 1:grid_dims[3]]
+    # Number of threads for parallel processing
+    num_threads = Threads.nthreads()
+    
+    # Create thread-local storage - one grid per thread
+    local_grids = [
+        [Vector{Int}() for _ in 1:grid_dims[1], _ in 1:grid_dims[2], _ in 1:grid_dims[3]]
+        for _ in 1:num_threads
+    ]
     
     # Process each tetrahedron
     p_elements = Progress(nel, 1, "Mapping tetrahedra to grid: ", 30)
     
     @threads for el in 1:nel
+        tid = Threads.threadid()
+        
         # Get tetrahedron vertices
         tet_vertices = @view X[:, IEN[:, el]]
         
@@ -97,13 +104,11 @@ function create_grid_tetrahedra_mapping(mesh::Mesh, grid::Grid, grid_dims)
         min_idx = max.(1, floor.(Int, (min_bounds .- grid_min) ./ cell_size) .- 1)
         max_idx = min.(grid_dims, ceil.(Int, (max_bounds .- grid_min) ./ cell_size) .+ 1)
         
-        # Add this tetrahedron to all overlapping grid cells
+        # Add this tetrahedron to all overlapping grid cells in thread-local grid
         for i in min_idx[1]:max_idx[1]
             for j in min_idx[2]:max_idx[2]
                 for k in min_idx[3]:max_idx[3]
-                    # Thread-safe push! operation
-                    cell_idx = CartesianIndex(i, j, k)
-                    push!(grid_tetrahedra[cell_idx], el)
+                    push!(local_grids[tid][i, j, k], el)
                 end
             end
         end
@@ -111,6 +116,21 @@ function create_grid_tetrahedra_mapping(mesh::Mesh, grid::Grid, grid_dims)
         # Update progress (only from thread 1)
         if Threads.threadid() == 1
             update!(p_elements, el)
+        end
+    end
+    finish!(p_elements)
+
+    # Initialize final grid
+    grid_tetrahedra = [Vector{Int}() for _ in 1:grid_dims[1], _ in 1:grid_dims[2], _ in 1:grid_dims[3]]
+    
+    # Merge results from all thread-local grids
+    for i in 1:grid_dims[1]
+        for j in 1:grid_dims[2]
+            for k in 1:grid_dims[3]
+                for tid in 1:num_threads
+                    append!(grid_tetrahedra[i, j, k], local_grids[tid][i, j, k])
+                end
+            end
         end
     end
     
@@ -125,7 +145,8 @@ function create_grid_tetrahedra_mapping(mesh::Mesh, grid::Grid, grid_dims)
     println("  Total cells: $(length(grid_tetrahedra))")
     println("  Occupied cells: $occupied_cells ($(round(100*occupied_cells/length(grid_tetrahedra), digits=2))%)")
     println("  Max tetrahedra per cell: $max_tets")
-    println("  Average tetrahedra per occupied cell: $(round(avg_tets * length(grid_tetrahedra) / occupied_cells, digits=2))")
+    avg_per_cell = occupied_cells > 0 ? sum(cell_counts) / occupied_cells : 0
+    println("  Average tetrahedra per occupied cell: $(round(avg_per_cell, digits=2))")
     
     return grid_tetrahedra
 end
