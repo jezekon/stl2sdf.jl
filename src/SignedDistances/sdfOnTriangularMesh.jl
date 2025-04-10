@@ -22,14 +22,14 @@ function evalDistancesOnTriMesh(mesh::TriangularMesh, grid::Grid, points::Matrix
     # Preprocessing all triangles to create an efficient searchable structure
     triangle_data = prepare_triangle_data(mesh)
     
-    println("Creating KD-tree for mesh vertices...")
+    # println("Creating KD-tree for mesh vertices...")
     # Create a KD-tree from all mesh vertices for nearest neighbor searches
     vtx_kdtree = KDTree(mesh.X)
     
     # Convert the triangle data to a format suitable for range searches
     triangle_centers = Matrix{Float64}(hcat([triangle_data[i].center for i in 1:length(triangle_data)]...))
     
-    println("Creating KD-tree for triangle centers...")
+    # println("Creating KD-tree for triangle centers...")
     # Create a KD-tree from triangle centers for faster triangle queries
     tri_kdtree = KDTree(triangle_centers)
     
