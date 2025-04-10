@@ -25,7 +25,7 @@ Note: The function informs the user that processing 80k nodes takes approximatel
 to help in estimating computational time for larger grids.
 """
 
-function calculate_edge_distances(mesh::Mesh)
+function calculate_edge_distances(mesh::TriangularMesh)
   EN = NodePosition3D(mesh)
   edges = mesh.edges
   nel = mesh.nel
@@ -89,7 +89,7 @@ function analyze_mesh(distances::Matrix{Float64})
   println("Average edge length of the largest element: ", round(avg_edge_largest, digits=4))
 end
 
-function noninteractive_sdf_grid_setup(mesh::Mesh, B::Float64)
+function noninteractive_sdf_grid_setup(mesh::TriangularMesh, B::Float64)
   X_min, X_max = MeshGrid.getMesh_AABB(mesh.X)
   distances = calculate_edge_distances(mesh)
   analyze_mesh(distances)
@@ -104,9 +104,7 @@ function noninteractive_sdf_grid_setup(mesh::Mesh, B::Float64)
   return sdf_grid
 end
 
-
-
-function interactive_sdf_grid_setup(mesh::Mesh)
+function interactive_sdf_grid_setup(mesh::TriangularMesh)
   X_min, X_max = MeshGrid.getMesh_AABB(mesh.X)
   distances = calculate_edge_distances(mesh)
   analyze_mesh(distances)
