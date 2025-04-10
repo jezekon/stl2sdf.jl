@@ -21,7 +21,7 @@ Parameters:
 Returns:
 - MeshGrid.Grid: The configured SDF grid based on user input.
 
-Note: The function informs the user that processing 80k nodes takes approximately 90 minutes,
+Note: The function informs the user that processing 100k nodes takes approximately 20 seconds,
 to help in estimating computational time for larger grids.
 """
 
@@ -102,7 +102,7 @@ function noninteractive_sdf_grid_setup(mesh::TriangularMesh, B::Float64)
   analyze_mesh(distances)
   sdf_grid = []
 
-  println("The time duration for 80k nodes was about 90 min. ")
+  println("The time duration for 100k nodes was about 20 seconds. ")
 
   N_new = floor(Int, maximum(X_max .- X_min) / B)
   sdf_grid = MeshGrid.Grid(X_min, X_max, N_new, 3)
@@ -117,7 +117,7 @@ function interactive_sdf_grid_setup(mesh::TriangularMesh)
   analyze_mesh(distances)
   sdf_grid = []
 
-  println("The time duration for 80k nodes was about 90 min. ")
+  println("The time duration for 100k nodes was about 20 seconds. ")
 
   while true
     while true
