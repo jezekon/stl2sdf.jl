@@ -68,6 +68,10 @@ function stl_to_sdf(stl_filename::String; options::SDFOptions = SDFOptions())
         options.grid_refinement,
         base_name
     )
+
+    # Export RBF smoothing results
+    print_info("Exporting RBF smoothing results")
+    export_results(fine_sdf, fine_grid, sdf_grid, base_name, options.grid_refinement, is_interpolation)
     
     # 7. Save data to JLD2 file
     output_file = "$(base_name)_sdf.jld2"

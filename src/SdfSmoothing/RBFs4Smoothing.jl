@@ -365,17 +365,9 @@ function RBFs_smoothing(
     # Adjust level set function to preserve volume
     fine_LSF_offset = fine_LSF .+ th
 
-    # Export results
-    B = round(my_grid.cell_size, digits=4)
-    exportSdfToVTI("$(taskName)_B-$(B)_smooth-$(smooth)_$(name).vti", my_grid, fine_LSF_offset, "distance", smooth)
-
     # Convert to 3D array for output
     fine_LSF_offset_array = vector_to_array(fine_LSF_offset, dim)
     fine_sdf = fine_LSF_offset_array
-
-    # Save results to JLD2 files
-    @save "Z_$(taskName)_FineSDF_B-$(B)_smooth-$(smooth)_$(name).jld2" fine_sdf
-    @save "Z_$(taskName)_FineGrid_B-$(B)_smooth-$(smooth)_$(name).jld2" fine_grid
 
     # Report final volume
     current_volume = calculate_volume_from_sdf(fine_sdf, fine_grid)

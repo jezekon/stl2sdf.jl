@@ -37,5 +37,6 @@ sdf_dists = dists .* signs
 exportSdfToVTI(taskName * "_SDF.vti", sdf_grid, sdf_dists, "distance")
 
 # RBF smoothing:
-(fine_sdf, fine_grid) = RBFs_smoothing(TetMesh, sdf_dists, sdf_grid, false, 2, taskName) # interpolation == true, aproximation == false, smooth
-
+is_interp = false
+(fine_sdf, fine_grid) = RBFs_smoothing(TetMesh, sdf_dists, sdf_grid, is_interp, 2, taskName) # interpolation == true, aproximation == false, smooth
+export_sdf_results(fine_sdf, fine_grid, sdf_grid, taskName, 2, is_interp)
