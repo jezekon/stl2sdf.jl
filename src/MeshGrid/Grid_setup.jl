@@ -26,24 +26,31 @@ to help in estimating computational time for larger grids.
 """
 
 function calculate_edge_distances(mesh::TriangularMesh)
-  EN = NodePosition3D(mesh)
-  edges = mesh.edges
-  nel = mesh.nel
-  noe = length(edges) # number of element edges
-
-  # Inicializace výstupní matice
-  distances = zeros(Float64, noe, nel)
+  nel = mesh.nel  # number of triangles
+  nen = mesh.nen  # number of nodes per element (should be 3 for triangles)
+  
+  # For triangular meshes, each element has 3 edges
+  num_edges_per_element = 3
+  
+  # Initialize output matrix: 3 edges per triangle, nel triangles
+  distances = zeros(Float64, num_edges_per_element, nel)
 
   for e in 1:nel
-    for (i, edge) in enumerate(edges)
-      start, finish = edge  # Použijeme 'finish' místo 'end'
-      # Výpočet vektoru hrany
-      dx = EN.x[finish, e] - EN.x[start, e]
-      dy = EN.y[finish, e] - EN.y[start, e]
-      dz = EN.z[finish, e] - EN.z[start, e]
-
-      # Výpočet vzdálenosti (délky) hrany
-      distances[i, e] = sqrt(dx^2 + dy^2 + dz^2)
+    # Get vertex indices for this triangle
+    v_indices = mesh.IEN[:, e]  # Should be a vector of 3 indices
+    
+    # For triangular mesh, iterate through its 3 edges
+    for i in 1:num_edges_per_element
+      # Calculate edge vertices (wrapping around for the last edge)
+      start_idx = v_indices[i]
+      end_idx = v_indices[mod1(i + 1, nen)]  # mod1 ensures it wraps to 1 when i = 3
+      
+      # Get vertex coordinates
+      start_point = mesh.X[:, start_idx]
+      end_point = mesh.X[:, end_idx]
+      
+      # Calculate distance using the norm function
+      distances[i, e] = norm(end_point - start_point)
     end
   end
 
