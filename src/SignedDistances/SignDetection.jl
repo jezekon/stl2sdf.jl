@@ -167,12 +167,12 @@ function create_grid_tetrahedra_mapping(mesh::Mesh, grid::Grid, grid_dims)
     empty_cells = count(c -> c == 0, cell_counts)
     occupied_cells = length(cell_counts) - empty_cells
     
-    println("Grid-to-tetrahedra mapping statistics:")
-    println("  Total cells: $(length(grid_tetrahedra))")
-    println("  Occupied cells: $occupied_cells ($(round(100*occupied_cells/length(grid_tetrahedra), digits=2))%)")
-    println("  Max tetrahedra per cell: $max_tets")
+    # println("Grid-to-tetrahedra mapping statistics:")
+    # println("  Total cells: $(length(grid_tetrahedra))")
+    # println("  Occupied cells: $occupied_cells ($(round(100*occupied_cells/length(grid_tetrahedra), digits=2))%)")
+    # println("  Max tetrahedra per cell: $max_tets")
     avg_per_cell = occupied_cells > 0 ? sum(cell_counts) / occupied_cells : 0
-    println("  Average tetrahedra per occupied cell: $(round(avg_per_cell, digits=2))")
+    # println("  Average tetrahedra per occupied cell: $(round(avg_per_cell, digits=2))")
     
     return grid_tetrahedra
 end
