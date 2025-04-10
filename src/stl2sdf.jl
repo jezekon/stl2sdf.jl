@@ -6,6 +6,7 @@ using LinearAlgebra
 using Statistics
 using DelimitedFiles
 using BenchmarkTools
+using JLD2
 
 # Tools for monitoring the computation process:
 include("TerminalUtils/TerminalUtils.jl")
@@ -29,7 +30,8 @@ using .SdfSmoothing
 
 # include("ImplicitDomainMeshing/ImplicitDomainMeshing.jl")
 # using .ImplicitDomainMeshing
+include("stl_to_sdf.jl")
 
-export import_tetgen_mesh, import_stl
+export stl_to_sdf, SDFOptions
 
 end # module stl2sdf
