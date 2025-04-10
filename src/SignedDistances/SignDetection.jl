@@ -114,9 +114,6 @@ function create_grid_tetrahedra_mapping(mesh::Mesh, grid::Grid, grid_dims)
         for _ in 1:num_threads
     ]
     
-    # Process each tetrahedron
-    p_elements = Progress(nel, 1, "Mapping tetrahedra to grid: ", 30)
-    
     @threads for el in 1:nel
         tid = Threads.threadid()
         
@@ -139,13 +136,7 @@ function create_grid_tetrahedra_mapping(mesh::Mesh, grid::Grid, grid_dims)
                 end
             end
         end
-        
-        # Update progress (only from thread 1)
-        if Threads.threadid() == 1
-            update!(p_elements, el)
-        end
     end
-    finish!(p_elements)
 
     # Initialize final grid
     grid_tetrahedra = [Vector{Int}() for _ in 1:grid_dims[1], _ in 1:grid_dims[2], _ in 1:grid_dims[3]]
