@@ -10,8 +10,10 @@ using stl2sdf.DataExport
 @testset "stl2sdf.jl" begin
     # Test configuration flags
     Import_beam = false
-    Import_bunny = true
+    Import_bunny = false
     RUN_lin_beam = false
+    RUN_main_some_opts = true
+    RUN_main_opts = true
     
     #NOTE:
     if Import_beam
@@ -63,10 +65,24 @@ using stl2sdf.DataExport
       signs = @time SignDetection(TetMesh, sdf_grid, points)
       sdf_dists = dists .* signs
 
-      # RBF smoothing:
-      (fine_sdf, fine_grid) = RBFs_smoothing(TetMesh, sdf_dists, sdf_grid, true, 1, taskName) # interpolation == true, aproximation == false, smooth
-
       exportSdfToVTI(taskName * "_SDF.vti", sdf_grid, sdf_dists, "distance")
 
+      # RBF smoothing:
+      (fine_sdf, fine_grid) = RBFs_smoothing(TetMesh, sdf_dists, sdf_grid, false, 2, taskName) # interpolation == true, aproximation == false, smooth
+    end
+
+    if RUN_main_some_opts
+      options = SDFOptions(grid_step = 0.8)  # Use defaults for other parameters
+      result = stl_to_sdf("beam-approx.stl", options=options)
+    end
+
+    if RUN_main_opts
+      # Specify all options
+      options = SDFOptions(
+          smoothing_method = :interpolation,
+          grid_refinement = 2,
+          grid_step = 0.8
+      )
+      result = stl_to_sdf("beam-approx.stl", options=options)
     end
 end
