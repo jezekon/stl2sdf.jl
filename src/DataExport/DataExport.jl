@@ -1,5 +1,5 @@
 module DataExport
-   
+  
 export SelectProjectedNodes, exportToVTU, exportStructuredPointsToVTK, exportSdfToVTI, export_sdf_results
 
 using Statistics
@@ -9,10 +9,19 @@ using JLD2
 using stl2sdf
 using stl2sdf.MeshGrid
 
+# Post-processing utilities for filtering and analyzing projected nodes
 include("DataPostProcess.jl")
+
+# Exporting mesh data to VTU format (unstructured grid visualization)
 include("ExportToVTU.jl")
+
+# Exporting structured point data to legacy VTK format
 include("ExportToVTK.jl")
+
+# Exporting SDF grid data to VTI format (image data visualization)
 include("ExportToVTI.jl")
+
+# Exporting complete SDF results with metadata
 include("ExportSdfResults.jl")
 
 end
