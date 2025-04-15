@@ -1,5 +1,4 @@
-
-
+# Extract the boundary surface mesh from a volumetric mesh by identifying outer faces
 function extractSurfaceTriangularMesh(mesh::Mesh)
     X = mesh.X
     IEN = mesh.IEN # ID element -> nodes
@@ -58,6 +57,7 @@ function extractSurfaceTriangularMesh(mesh::Mesh)
     return TriangularMesh(X_new, IEN_new)
 end
 
+# Find the position of a triangle with given vertices in the mesh
 function find_triangle_position(EN::NodalCoordinatesInElement, vertices::Matrix)
     # Preprocess input vertices to sort each vertex set for unordered comparison
     sorted_vertices = sort!(vec(vertices))

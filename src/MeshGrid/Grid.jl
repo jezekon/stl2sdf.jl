@@ -1,37 +1,3 @@
-
-# N = [20, 20, 50]
-# struct Grid
-#     AABB_min::Vector{Float64}  # Minimum coordinates of the Axis-Aligned Bounding Box (AABB)
-#     AABB_max::Vector{Float64}  # Maximum coordinates of the AABB
-#     N::Vector{Int64}           # Number of divisions along each axis
-#     cell_size::Vector{Float64} # Size of each cell in the grid
-#     ngp::Int64                 # Total number of grid points
-
-#     # Marginal cells are added around the AABB to provide a buffer zone.
-#     function Grid(
-#         AABB_min::Vector{Float64},
-#         AABB_max::Vector{Float64},
-#         N::Vector{Int64},
-#         margineCells::Int64 = 3,
-#     )
-
-#         cell_size = (AABB_max .- AABB_min) ./ N
-
-#         # Adjusting the AABB with marginal cells
-#         AABB_min = AABB_min .- margineCells * cell_size
-#         AABB_max = AABB_max .+ margineCells * cell_size
-
-#         AABB_size = AABB_max .- AABB_min
-
-#         # Recalculating grid dimensions and total grid points
-#         N = N .+ 2 * margineCells # (2 = both sides)
-#         ngp = prod(N .+ 1) # number of grid points
-
-#         return new(AABB_min, AABB_max, N, cell_size, ngp)
-
-#     end
-# end
-
 mutable struct Grid
     AABB_min::Vector{Float64}  # Minimum coordinates of the Axis-Aligned Bounding Box (AABB)
     AABB_max::Vector{Float64}  # Maximum coordinates of the AABB
@@ -46,30 +12,29 @@ mutable struct Grid
         N_max::Int64,
         margineCells::Int64 = 3,
     )
-
+        # Calculate cell size based on the maximum dimension
         cell_size = maximum(AABB_max .- AABB_min) ./ N_max
 
         # Adjusting the AABB with marginal cells
         AABB_min = AABB_min .- margineCells * cell_size
         AABB_max = AABB_max .+ margineCells * cell_size
 
-        # N = ceil.((AABB_max .- AABB_min)./cell_size)
+        # Calculate number of cells in each dimension
         N = ceil.(Int64, (AABB_max .- AABB_min) / cell_size)
         
+        # Adjust AABB_max to ensure exact fit with cells
         AABB_max = AABB_min + N .* cell_size
 
-        # Recalculating grid dimensions and total grid points
-        # N = N .+ 2 * margineCells # (2 = both sides)
+        # Calculate total number of grid points
         ngp = prod(N .+ 1) # number of grid points
 
         return new(AABB_min, AABB_max, N, cell_size, ngp)
-
     end
 end
 
 
 # Struct for managing a linked list in the context of a grid. (Useful for spatial hashing or similar applications.)
-mutable struct LinkedList # rozdělení pravidelné sítě na regiony
+mutable struct LinkedList # division of regular grid into regions
     grid::Grid           # The grid associated with the linked list
     head::Vector{Int64}  # Array representing the head of each list
     next::Vector{Int64}  # Array representing the next element in each list
@@ -84,6 +49,7 @@ mutable struct LinkedList # rozdělení pravidelné sítě na regiony
         AABB_min = grid.AABB_min
         AABB_max = grid.AABB_max
 
+        # Initialize head and next arrays with -1 (indicating empty)
         head = -1 * ones(Int64, prod(N .+ 1))
         next = -1 * ones(Int64, np)
 
@@ -112,8 +78,10 @@ end
 # Generates grid points for a given grid structure.
 # Returns a matrix where each column represents the coordinates of a grid point.
 function generateGridPoints(grid::Grid)::Matrix{Float64}
+    # Initialize matrix to store all grid point coordinates
     X = zeros(3, grid.ngp)
     a = 1
+    # Iterate through all grid points in 3D space
     for k = 0:grid.N[3]
         for j = 0:grid.N[2]
             for i = 0:grid.N[1]
@@ -125,25 +93,13 @@ function generateGridPoints(grid::Grid)::Matrix{Float64}
     return X
 end
 
-# Paralel version:
-# function generateGridPoints(grid::Grid)::Matrix{Float64}
-#     X = zeros(3, grid.ngp)
-#     a = Atomic{Int}(1)
-#     @threads for k = 0:grid.N[3]
-#         for j = 0:grid.N[2]
-#             for i = 0:grid.N[1]
-#                 idx = atomic_add!(a, 1)
-#                 X[:, idx] = grid.AABB_min .+ grid.cell_size .* [i, j, k]
-#             end
-#         end
-#     end
-#     return X
-# end
-
+# Generates connectivity array for hexahedral elements in the grid
 function generateConnectivityArray(grid::Grid)::Vector{Vector{Int64}}
-    N = grid.N .+ 1 # N is now a number of vertex in row not number of cells
-    IEN = [fill(0, 8) for _ in 1:prod(N.-1) ]
+    N = grid.N .+ 1 # N is now the number of vertices in a row, not the number of cells
+    # Initialize array of element connectivity
+    IEN = [fill(0, 8) for _ in 1:prod(N.-1)]
     m = 1
+    # Generate 8-node connectivity for each hexahedral element
     for k = 1:N[3]-1
         for j = 1:N[2]-1
             for i = 1:N[1]-1
@@ -166,23 +122,26 @@ function generateConnectivityArray(grid::Grid)::Vector{Vector{Int64}}
 end
 
 
+# Calculate the mini-AABB indices within the grid for a given geometry
 function calculateMiniAABB_grid(
-    Xt::Matrix{Float64}, # 
-    δ::Float64,
-    N::Vector{Int64},
-    AABB_min::Vector{Float64},
-    AABB_max::Vector{Float64},
-    nsd::Int)
+    Xt::Matrix{Float64}, # Coordinates of the geometry (e.g., triangle)
+    δ::Float64,          # Safety margin
+    N::Vector{Int64},    # Grid dimensions
+    AABB_min::Vector{Float64}, # Grid minimum bounds
+    AABB_max::Vector{Float64}, # Grid maximum bounds
+    nsd::Int)            # Number of spatial dimensions
     
-    Xt_min = minimum(Xt, dims = 2) .- δ # bottom left corner coord
-    Xt_max = maximum(Xt, dims = 2) .+ δ # top righ corner coord
+    # Calculate bounds of the geometry with safety margin
+    Xt_min = minimum(Xt, dims = 2) .- δ # bottom left corner coordinates
+    Xt_max = maximum(Xt, dims = 2) .+ δ # top right corner coordinates
 
     # Mini AABB for triangle:
+    # Calculate the indices in the grid for the mini-AABB
     I_min = floor.(N .* (Xt_min .- AABB_min) ./ (AABB_max .- AABB_min)) # Triangle location (index) within the grid
     I_max = floor.(N .* (Xt_max .- AABB_min) ./ (AABB_max .- AABB_min)) # Triangle location (index) within the grid
 
-
-    for j = 1:nsd # am I inside AABB?
+    # Ensure indices are within grid bounds
+    for j = 1:nsd # check if inside grid AABB
         if (I_min[j] < 0)
             I_min[j] = 0
         end
@@ -191,7 +150,8 @@ function calculateMiniAABB_grid(
         end
     end
 
-    Is = Iterators.product( # step range of mini AABB
+    # Create a product iterator for all grid cells that intersect with the mini-AABB
+    Is = Iterators.product( # range of indices within the mini-AABB
         I_min[1]:I_max[1],
         I_min[2]:I_max[2],
         I_min[3]:I_max[3],
@@ -199,4 +159,3 @@ function calculateMiniAABB_grid(
 
     return Is
 end
-

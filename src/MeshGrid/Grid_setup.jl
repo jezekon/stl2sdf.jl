@@ -26,30 +26,31 @@ to help in estimating computational time for larger grids.
 """
 
 function calculate_edge_distances(mesh::TriangularMesh)
-  nel = mesh.nel  # number of triangles
-  nen = mesh.nen  # number of nodes per element (should be 3 for triangles)
+  # Get mesh dimensions
+  nel = mesh.nel  # Number of triangles
+  nen = mesh.nen  # Nodes per element (3 for triangles)
   
-  # For triangular meshes, each element has 3 edges
+  # Each triangle has 3 edges
   num_edges_per_element = 3
   
-  # Initialize output matrix: 3 edges per triangle, nel triangles
+  # Initialize matrix to store edge lengths
   distances = zeros(Float64, num_edges_per_element, nel)
 
   for e in 1:nel
-    # Get vertex indices for this triangle
-    v_indices = mesh.IEN[:, e]  # Should be a vector of 3 indices
+    # Get vertex indices for current triangle
+    v_indices = mesh.IEN[:, e]
     
-    # For triangular mesh, iterate through its 3 edges
+    # Calculate length of each edge in the triangle
     for i in 1:num_edges_per_element
-      # Calculate edge vertices (wrapping around for the last edge)
+      # Get vertex indices for current edge
       start_idx = v_indices[i]
-      end_idx = v_indices[mod1(i + 1, nen)]  # mod1 ensures it wraps to 1 when i = 3
+      end_idx = v_indices[mod1(i + 1, nen)]  # Wrap to first vertex after last
       
       # Get vertex coordinates
       start_point = mesh.X[:, start_idx]
       end_point = mesh.X[:, end_idx]
       
-      # Calculate distance using the norm function
+      # Store edge length
       distances[i, e] = norm(end_point - start_point)
     end
   end
@@ -57,34 +58,31 @@ function calculate_edge_distances(mesh::TriangularMesh)
   return distances
 end
 
+# Terminal color codes for highlighting important information
 const RED = "\e[31m"
 const BOLD = "\e[1m"
 const RESET = "\e[0m"
 
 function analyze_mesh(distances::Matrix{Float64})
-  num_elements = size(distances, 2)  # number of elements
+  # Count number of triangular elements
+  num_elements = size(distances, 2)
 
-  # Overall shortest and longest edge
+  # Calculate edge length statistics
   shortest_edge = minimum(distances)
   longest_edge = maximum(distances)
-
-  # Average edge length
   avg_edge_length = mean(distances)
-
-  # Median edge length
   median_edge_length = median(vec(distances))
 
-  # Sum of edge lengths for each element
+  # Find smallest and largest triangles
   element_sums = sum(distances, dims=1)
-
-  # Indices of the smallest and largest elements
   smallest_element_index = argmin(vec(element_sums))
   largest_element_index = argmax(vec(element_sums))
 
-  # Average edge length of the smallest and largest elements
+  # Calculate average edge length for smallest and largest triangles
   avg_edge_smallest = mean(distances[:, smallest_element_index])
   avg_edge_largest = mean(distances[:, largest_element_index])
 
+  # Print mesh statistics with highlighting for important values
   println("Mesh Statistics:")
   println("----------------")
   println("Number of elements: ", num_elements)
@@ -97,14 +95,21 @@ function analyze_mesh(distances::Matrix{Float64})
 end
 
 function noninteractive_sdf_grid_setup(mesh::TriangularMesh, B::Float64)
+  # Get mesh bounding box and analyze edge lengths
   X_min, X_max = MeshGrid.getMesh_AABB(mesh.X)
   distances = calculate_edge_distances(mesh)
   analyze_mesh(distances)
+  
+  # Initialize grid variable
   sdf_grid = []
 
+  # Performance note for user
   println("The time duration for 100k nodes was about 20 seconds. ")
 
+  # Calculate number of cells based on desired cell size B
   N_new = floor(Int, maximum(X_max .- X_min) / B)
+  
+  # Create grid with 3-cell margin
   sdf_grid = MeshGrid.Grid(X_min, X_max, N_new, 3)
   println("Number of all grid points: ", sdf_grid.ngp)
 
@@ -112,26 +117,33 @@ function noninteractive_sdf_grid_setup(mesh::TriangularMesh, B::Float64)
 end
 
 function interactive_sdf_grid_setup(mesh::TriangularMesh)
+  # Get mesh bounding box and analyze edge lengths
   X_min, X_max = MeshGrid.getMesh_AABB(mesh.X)
   distances = calculate_edge_distances(mesh)
   analyze_mesh(distances)
+  
+  # Initialize grid variable
   sdf_grid = []
 
+  # Performance note for user
   println("The time duration for 100k nodes was about 20 seconds. ")
 
+  # Main interaction loop
   while true
+    # Get valid grid step size from user
     while true
       print("Write a grid step based on grid analysis: ")
       user_input = readline()
 
       try
         B = parse(Float64, user_input)
-
+        
+        # Calculate grid dimensions based on input cell size
         N_new = floor(Int, maximum(X_max .- X_min) / B)
         sdf_grid = MeshGrid.Grid(X_min, X_max, N_new, 3)
         println("Number of all grid points: ", sdf_grid.ngp)
 
-        break  # Exit the inner loop if the input is valid
+        break  # Exit input validation loop on success
       catch e
         if isa(e, ArgumentError)
           println("Error: Please enter a valid floating-point number.")
@@ -141,15 +153,14 @@ function interactive_sdf_grid_setup(mesh::TriangularMesh)
       end
     end
 
+    # Ask if the user wants to accept current grid or try again
     print("Do you want to continue? (y/n): ")
-    odpoved = lowercase(strip(readline()))
+    response = lowercase(strip(readline()))
 
-    if odpoved == "y"
+    if response == "y"
       return sdf_grid
     else
       println("You can write a grid step.")
     end
   end
 end
-
-
