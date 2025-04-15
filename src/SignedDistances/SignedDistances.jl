@@ -15,8 +15,10 @@ using stl2sdf.MeshGrid
 using stl2sdf.DataExport
 using stl2sdf
 
-# Compute local coords:
-include("sdfOnTriangularMesh.jl")
+# Compute the unsigned distance field:
+include("dfOnTriangularMesh.jl")
+
+# Compute signs:
 include("SignDetection.jl")
 
 end
