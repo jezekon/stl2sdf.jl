@@ -6,8 +6,6 @@ using JLD2
 using KernelFunctions
 using LinearAlgebra
 using SparseArrays
-using StaticArrays
-using BenchmarkTools
 using Statistics
 using NearestNeighbors
 using IterativeSolvers
