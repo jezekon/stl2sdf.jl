@@ -4,8 +4,6 @@ export MeshInformations
 
 using LinearAlgebra
 using Statistics
-using DelimitedFiles
-using BenchmarkTools
 using JLD2
 
 # Tools for monitoring the computation process:
