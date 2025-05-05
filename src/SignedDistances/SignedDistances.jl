@@ -7,7 +7,6 @@ using Statistics
 using StaticArrays
 using LinearAlgebra
 using ProgressMeter
-using BenchmarkTools
 using NearestNeighbors
 
 using stl2sdf.TerminalUtils
