@@ -70,9 +70,11 @@ function stl_to_sdf(stl_filename::String; options::SDFOptions = SDFOptions())
     )
     
     # 7. Save data to JLD2 file
-    output_file = "$(base_name)_sdf.jld2"
-    print_info("Saving SDF data to $output_file")
-    @save output_file sdf_dists sdf_grid fine_sdf fine_grid
+    sdf_output_file = "$(base_name)_sdf.jld2"
+    grid_output_file = "$(base_name)_grid.jld2"
+    print_info("Saving SDF data to $sdf_output_file and $grid_output_file")
+    @save sdf_output_file fine_sdf
+    @save grid_output_file fine_grid
     
     # Export the results as VTI format for visualization
     print_info("Exporting SDF to VTI file")
