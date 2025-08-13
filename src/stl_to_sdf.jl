@@ -62,13 +62,22 @@ function stl_to_sdf(stl_filename::String; options::SDFOptions = SDFOptions())
   (dists, xp) = evalDistancesOnTriMesh(TriMesh, sdf_grid, points)
 
   print_info("Computing signs")
-  # signs = SignDetection(TetMesh, sdf_grid, points)
-  signs = try
-    SignDetection(TetMesh, sdf_grid, points)
+  signs, confidences = try
+    # Tetrahedral method - add dummy confidences for consistency
+    tet_signs = SignDetection(TetMesh, sdf_grid, points)
+    (tet_signs, ones(Float64, length(tet_signs)))  # confidence = 1.0 for tet method
   catch e
     print_warning("Tetrahedral sign detection failed")
     print_info("Falling back to ray casting method...")
-    SignDetection(TriMesh, sdf_grid, points)  # fallback na triangular mesh
+
+    # Fallback returns (signs, confidences)
+    SignDetection(TriMesh, sdf_grid, points)
+  end
+
+  # Optional: log low confidence points
+  if any(c -> c < 0.6, confidences)
+    low_conf_count = count(c -> c < 0.6, confidences)
+    print_warning("$(low_conf_count) points have low confidence (<0.6)")
   end
 
   print_info("Combining distances and signs to create SDF")
@@ -100,5 +109,5 @@ function stl_to_sdf(stl_filename::String; options::SDFOptions = SDFOptions())
   exportSdfToVTI("$(base_name)_sdf.vti", sdf_grid, sdf_dists, "distance")
 
   # Return results
-  return (sdf_dists, sdf_grid, fine_sdf, fine_grid)
+  # return (sdf_dists, sdf_grid, fine_sdf, fine_grid)
 end
