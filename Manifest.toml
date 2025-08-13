@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.11.5"
+julia_version = "1.11.6"
 manifest_format = "2.0"
-project_hash = "7145ca20f4d827c1b1da2ddebdc462cbd301dacd"
+project_hash = "6feb6cd5bfc56152a7d8b40d030b02fa9e901f18"
 
 [[deps.AbstractTrees]]
 git-tree-sha1 = "2d9c9a55f9c93e8887ad391fbae72f8ef55e1177"
@@ -511,7 +511,7 @@ uuid = "4b2f31a3-9ecc-558c-b454-b3730dcb73e9"
 version = "2.41.0+0"
 
 [[deps.Librsvg_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Pango_jll", "Pkg", "gdk_pixbuf_jll"]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pango_jll", "Pkg", "XML2_jll", "gdk_pixbuf_jll"]
 git-tree-sha1 = "ae0923dab7324e6bc980834f709c4cd83dd797ed"
 uuid = "925c91fb-5dd6-59dd-8e8c-345e74382d89"
 version = "2.54.5+0"
