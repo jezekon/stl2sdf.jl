@@ -1,6 +1,6 @@
 function SignDetection(tri_mesh::TriangularMesh, grid::Grid, points::Matrix)
   print_warning("Using raycast fallback for sign detection")
-  return RaycastingSignDetection(tri_mesh, grid, points)
+  return raycast_sign_detection(tri_mesh, grid, points)
 end
 
 """

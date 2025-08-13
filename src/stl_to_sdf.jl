@@ -66,7 +66,7 @@ function stl_to_sdf(stl_filename::String; options::SDFOptions = SDFOptions())
   signs = try
     SignDetection(TetMesh, sdf_grid, points)
   catch e
-    print_warning("Tetrahedral sign detection failed: $e")
+    print_warning("Tetrahedral sign detection failed")
     print_info("Falling back to ray casting method...")
     SignDetection(TriMesh, sdf_grid, points)  # fallback na triangular mesh
   end
