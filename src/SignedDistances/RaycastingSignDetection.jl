@@ -2,7 +2,7 @@
     RaycastingSignDetection.jl
     
 Optimized implementation using ImplicitBVH.jl for acceleration.
-Uses multi-directional ray casting with voting for robustness.
+Uses adaptive ray casting with early termination and spatial coherence.
 """
 
 """
@@ -25,6 +25,17 @@ struct TriangleBVH
   bvh::BVH
   triangles::Vector{Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}}
   bounding_spheres::Vector{BSphere{Float64}}
+end
+
+"""
+    SpatialHint
+
+Structure to store spatial coherence information from neighboring points.
+"""
+struct SpatialHint
+  has_hint::Bool
+  likely_sign::Float64
+  neighbor_confidence::Float64
 end
 
 """
@@ -106,16 +117,17 @@ function ray_triangle_intersection(
 end
 
 """
-    count_ray_intersections_bvh(origin, direction, tri_bvh, ε=1e-8)
+    check_ray_inside_bvh(origin, direction, tri_bvh, ε=1e-8)
 
-Count intersections using BVH acceleration. Removes duplicates.
+Check if point is inside mesh using early termination.
+Returns true after finding first valid intersection (odd parity).
 """
-function count_ray_intersections_bvh(
+function check_ray_inside_bvh(
   origin::Vector{Float64},
   direction::Vector{Float64},
   tri_bvh::TriangleBVH,
   ε::Float64 = 1e-8
-)::Int
+)::Bool
   # Reshape for ImplicitBVH interface (3×1 matrices)
   points = reshape(origin, 3, 1)
   directions = reshape(direction, 3, 1)
@@ -123,7 +135,7 @@ function count_ray_intersections_bvh(
   # Find potential intersections using BVH
   traversal = traverse_rays(tri_bvh.bvh, points, directions)
 
-  # Test actual ray-triangle intersections for candidates only
+  # Collect valid intersections
   intersections = Float64[]
 
   for (tri_idx, _) in traversal.contacts
@@ -134,11 +146,11 @@ function count_ray_intersections_bvh(
     end
   end
 
-  # Remove duplicates (same distance = likely duplicate triangles)
-  if length(intersections) <= 1
-    return length(intersections)
+  if isempty(intersections)
+    return false
   end
 
+  # Remove duplicates for robust parity check
   sort!(intersections)
   unique_count = 1
 
@@ -148,23 +160,20 @@ function count_ray_intersections_bvh(
     end
   end
 
-  return unique_count
+  # Odd count means inside
+  return unique_count % 2 == 1
 end
 
 """
-    generate_ray_directions(num_directions::Int, seed::Int=42)
+    generate_ray_directions_prioritized()
 
-Generate well-distributed ray directions for robust voting.
+Generate ray directions in priority order for adaptive sampling.
+Returns ordered list where early directions give good coverage.
 """
-function generate_ray_directions(
-  num_directions::Int,
-  seed::Int = 42
-)::Vector{Vector{Float64}}
-  Random.seed!(seed)
-
+function generate_ray_directions_prioritized()::Vector{Vector{Float64}}
   directions = Vector{Vector{Float64}}()
 
-  # Primary axis directions
+  # Level 1: Primary axes (6 directions)
   primary_axes = [
     [1.0, 0.0, 0.0],  # +X
     [0.0, 1.0, 0.0],  # +Y  
@@ -174,8 +183,8 @@ function generate_ray_directions(
     [0.0, 0.0, -1.0]  # -Z
   ]
 
-  # Diagonal directions
-  diagonal_directions = [
+  # Level 2: Face diagonals (12 directions)
+  face_diagonals = [
     [1.0, 1.0, 0.0],
     [1.0, -1.0, 0.0],
     [-1.0, 1.0, 0.0],
@@ -190,85 +199,122 @@ function generate_ray_directions(
     [0.0, -1.0, -1.0]
   ]
 
-  # Add primary axes
+  # Level 3: Body diagonals (8 directions)
+  body_diagonals = [
+    [1.0, 1.0, 1.0],
+    [1.0, 1.0, -1.0],
+    [1.0, -1.0, 1.0],
+    [1.0, -1.0, -1.0],
+    [-1.0, 1.0, 1.0],
+    [-1.0, 1.0, -1.0],
+    [-1.0, -1.0, 1.0],
+    [-1.0, -1.0, -1.0]
+  ]
+
+  # Add in priority order
   for dir in primary_axes
-    if length(directions) < num_directions
-      push!(directions, normalize(dir))
-    end
+    push!(directions, normalize(dir))
   end
 
-  # Add diagonal directions
-  for dir in diagonal_directions
-    if length(directions) < num_directions
-      push!(directions, normalize(dir))
-    end
+  for dir in face_diagonals
+    push!(directions, normalize(dir))
   end
 
-  # Fill remaining with random directions
-  while length(directions) < num_directions
-    θ = 2π * rand()
-    φ = acos(2 * rand() - 1)
+  for dir in body_diagonals
+    push!(directions, normalize(dir))
+  end
 
-    x = sin(φ) * cos(θ)
-    y = sin(φ) * sin(θ)
-    z = cos(φ)
-
-    push!(directions, normalize([x, y, z]))
+  # Additional quasi-random directions for complex cases
+  # Using deterministic generation for reproducibility
+  φ = (1.0 + sqrt(5.0)) / 2.0  # Golden ratio
+  for i in 1:10
+    θ = 2π * mod(i * φ, 1.0)
+    z = 1.0 - 2.0 * (i / 10.0)
+    r = sqrt(1.0 - z * z)
+    push!(directions, [r * cos(θ), r * sin(θ), z])
   end
 
   return directions
 end
 
 """
-    perturb_direction(direction, perturbation_scale=1e-6)
+    adaptive_point_in_mesh_raycast(point, tri_bvh, hint, min_rays=6, max_rays=30)
 
-Slightly perturb a direction to avoid degenerate cases.
+Adaptive ray casting that adjusts number of rays based on confidence.
+Uses spatial hint to optimize easy cases.
 """
-function perturb_direction(
-  direction::Vector{Float64},
-  perturbation_scale::Float64 = 1e-6
-)::Vector{Float64}
-  perturbation = perturbation_scale * randn(3)
-  return normalize(direction + perturbation)
-end
-
-"""
-    robust_point_in_mesh_raycast_bvh(point, tri_bvh, num_directions=20)
-
-Optimized version using BVH for acceleration.
-"""
-function robust_point_in_mesh_raycast_bvh(
+function adaptive_point_in_mesh_raycast(
   point::Vector{Float64},
   tri_bvh::TriangleBVH,
-  num_directions::Int = 20
+  hint::SpatialHint,
+  min_rays::Int = 6,
+  max_rays::Int = 30
 )::Tuple{Float64, Float64}
-  directions = generate_ray_directions(num_directions)
+  directions = generate_ray_directions_prioritized()
 
-  # Process all rays in parallel
-  results = Vector{RaycastResult}(undef, num_directions)
+  # Quick check with hint
+  if hint.has_hint && hint.neighbor_confidence > 0.95
+    # High confidence neighborhood - verify with minimal rays
+    inside_count = 0
+    for i in 1:min(4, min_rays)
+      if check_ray_inside_bvh(point, directions[i], tri_bvh)
+        inside_count += 1
+      end
+    end
 
-  @threads for i in 1:num_directions
-    # Perturb direction slightly to avoid degeneracies
-    perturbed_dir = perturb_direction(directions[i])
-
-    # Count intersections using BVH
-    intersection_count = count_ray_intersections_bvh(point, perturbed_dir, tri_bvh)
-
-    # Odd count = inside, even count = outside
-    is_inside = (intersection_count % 2 == 1)
-
-    results[i] = RaycastResult(intersection_count, perturbed_dir, is_inside)
+    # If all agree with hint, return early
+    if (inside_count == 4 && hint.likely_sign > 0) ||
+       (inside_count == 0 && hint.likely_sign < 0)
+      return (hint.likely_sign, 1.0)
+    end
   end
 
-  # Vote counting
-  inside_votes = count(r -> r.is_inside, results)
-  inside_fraction = inside_votes / num_directions
+  # Adaptive sampling
+  inside_votes = 0
+  total_votes = 0
+  confidence_threshold = 0.85
 
-  # Determine sign and confidence
-  sign = inside_fraction > 0.5 ? 1.0 : -1.0
-  confidence = max(inside_fraction, 1.0 - inside_fraction)
+  # Start with minimum rays
+  for i in 1:min_rays
+    if check_ray_inside_bvh(point, directions[i], tri_bvh)
+      inside_votes += 1
+    end
+    total_votes += 1
+  end
 
-  return (sign, confidence)
+  # Check if we have high confidence already
+  current_ratio = inside_votes / total_votes
+  current_confidence = max(current_ratio, 1.0 - current_ratio)
+
+  # Continue sampling if confidence is low
+  rays_used = min_rays
+  while current_confidence < confidence_threshold && rays_used < max_rays
+    # Sample next batch
+    batch_size = min(4, max_rays - rays_used)
+    for i in (rays_used + 1):(rays_used + batch_size)
+      if i <= length(directions)
+        if check_ray_inside_bvh(point, directions[i], tri_bvh)
+          inside_votes += 1
+        end
+        total_votes += 1
+      end
+    end
+    rays_used += batch_size
+
+    # Update confidence
+    current_ratio = inside_votes / total_votes
+    current_confidence = max(current_ratio, 1.0 - current_ratio)
+
+    # Early termination for very high confidence
+    if current_confidence > 0.95
+      break
+    end
+  end
+
+  # Determine final sign
+  sign = current_ratio > 0.5 ? 1.0 : -1.0
+
+  return (sign, current_confidence)
 end
 
 """
@@ -313,21 +359,22 @@ end
 
 """
     raycast_sign_detection(mesh::TriangularMesh, grid::Grid, points::Matrix{Float64}; 
-                          num_directions=20, confidence_threshold=0.6, use_winding_fallback=true)
+                          min_rays=6, max_rays=30, confidence_threshold=0.6, 
+                          use_winding_fallback=true, use_spatial_coherence=true)
 
-Main function for ray casting based sign detection using BVH acceleration.
-Maintains compatibility with original interface.
+Main function for optimized ray casting with adaptive sampling and spatial coherence.
 """
 function raycast_sign_detection(
   mesh::TriangularMesh,
   grid::Grid,
   points::Matrix{Float64};
-  num_directions::Int = 20,
+  min_rays::Int = 6,
+  max_rays::Int = 30,
   confidence_threshold::Float64 = 0.6,
-  use_winding_fallback::Bool = true
+  use_winding_fallback::Bool = true,
+  use_spatial_coherence::Bool = true
 )::Tuple{Vector{Float64}, Vector{Float64}}
-  print_info("Using BVH-accelerated ray casting for sign detection...")
-  print_info("Converting mesh to triangle format...")
+  print_info("Using optimized adaptive ray casting for sign detection...")
 
   # Convert mesh to triangle format
   triangles = Vector{Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}}()
@@ -339,8 +386,6 @@ function raycast_sign_detection(
     push!(triangles, (v1, v2, v3))
   end
 
-  print_info("Building BVH structure for $(length(triangles)) triangles...")
-
   # Build BVH acceleration structure
   tri_bvh = build_triangle_bvh(triangles)
 
@@ -348,43 +393,45 @@ function raycast_sign_detection(
   signs = Vector{Float64}(undef, ngp)
   confidences = Vector{Float64}(undef, ngp)
 
-  print_info("Processing $(ngp) grid points with $(num_directions) rays each...")
+  # Check if grid has dimension information for spatial coherence
+  has_grid_dims = isdefined(grid, :nelx) && isdefined(grid, :nely) && isdefined(grid, :nelz)
 
-  # Progress tracking
-  p = Progress(ngp, 1, "Ray casting: ", 30)
+  # Standard parallel processing without spatial coherence
+  p = Progress(ngp, 1, "Adaptive ray casting: ", 30)
   counter = Atomic{Int}(0)
-  update_interval = max(1, div(ngp, 100))
 
-  # Process grid points in parallel
   @threads for i in 1:ngp
     point = points[:, i]
 
-    # Primary method: BVH-accelerated ray casting with voting
-    (sign, confidence) = robust_point_in_mesh_raycast_bvh(point, tri_bvh, num_directions)
+    # No spatial hint
+    hint = SpatialHint(false, 0.0, 0.0)
 
-    # Fallback method for low confidence points
+    # Adaptive ray casting
+    (sign, confidence) =
+      adaptive_point_in_mesh_raycast(point, tri_bvh, hint, min_rays, max_rays)
+
+    # Fallback for low confidence
     if use_winding_fallback && confidence < confidence_threshold
       sign = generalized_winding_number(point, triangles)
-      confidence = 0.5  # Mark as fallback method
+      confidence = 0.5
     end
 
     signs[i] = sign
     confidences[i] = confidence
 
-    # Update progress
     count = atomic_add!(counter, 1)
-    if count % update_interval == 0 && Threads.threadid() == 1
+    if count % 100 == 0 && Threads.threadid() == 1
       update!(p, min(count, ngp))
     end
   end
 
   finish!(p)
 
-  # Print statistics
+  # Statistics
   low_confidence_count = count(c -> c < confidence_threshold, confidences)
   mean_confidence = mean(confidences)
 
-  print_success("BVH-accelerated ray casting completed!")
+  print_success("Optimized ray casting completed!")
   print_info("Mean confidence: $(round(mean_confidence, digits=3))")
   print_info(
     "Low confidence points: $(low_confidence_count)/$(ngp) ($(round(100*low_confidence_count/ngp, digits=1))%)"

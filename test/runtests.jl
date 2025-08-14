@@ -91,7 +91,6 @@ using BenchmarkTools
 
   if RUN_beam_Mecas
     taskName = "beam_Mecas"
-    println(pwd())
     N = 60  # Number of cells along the longest side
 
     # 1. Import STL file
