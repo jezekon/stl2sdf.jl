@@ -2,7 +2,7 @@
     RaycastingSignDetection.jl
     
 Optimized implementation using ImplicitBVH.jl for acceleration.
-Uses adaptive ray casting with early termination and spatial coherence.
+Uses adaptive ray casting with early termination.
 """
 
 """
@@ -25,17 +25,6 @@ struct TriangleBVH
   bvh::BVH
   triangles::Vector{Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}}
   bounding_spheres::Vector{BSphere{Float64}}
-end
-
-"""
-    SpatialHint
-
-Structure to store spatial coherence information from neighboring points.
-"""
-struct SpatialHint
-  has_hint::Bool
-  likely_sign::Float64
-  neighbor_confidence::Float64
 end
 
 """
@@ -238,36 +227,17 @@ function generate_ray_directions_prioritized()::Vector{Vector{Float64}}
 end
 
 """
-    adaptive_point_in_mesh_raycast(point, tri_bvh, hint, min_rays=6, max_rays=30)
+    adaptive_point_in_mesh_raycast(point, tri_bvh, min_rays=6, max_rays=30)
 
 Adaptive ray casting that adjusts number of rays based on confidence.
-Uses spatial hint to optimize easy cases.
 """
 function adaptive_point_in_mesh_raycast(
   point::Vector{Float64},
   tri_bvh::TriangleBVH,
-  hint::SpatialHint,
   min_rays::Int = 6,
   max_rays::Int = 30
 )::Tuple{Float64, Float64}
   directions = generate_ray_directions_prioritized()
-
-  # Quick check with hint
-  if hint.has_hint && hint.neighbor_confidence > 0.95
-    # High confidence neighborhood - verify with minimal rays
-    inside_count = 0
-    for i in 1:min(4, min_rays)
-      if check_ray_inside_bvh(point, directions[i], tri_bvh)
-        inside_count += 1
-      end
-    end
-
-    # If all agree with hint, return early
-    if (inside_count == 4 && hint.likely_sign > 0) ||
-       (inside_count == 0 && hint.likely_sign < 0)
-      return (hint.likely_sign, 1.0)
-    end
-  end
 
   # Adaptive sampling
   inside_votes = 0
@@ -360,9 +330,9 @@ end
 """
     raycast_sign_detection(mesh::TriangularMesh, grid::Grid, points::Matrix{Float64}; 
                           min_rays=6, max_rays=30, confidence_threshold=0.6, 
-                          use_winding_fallback=true, use_spatial_coherence=true)
+                          use_winding_fallback=true)
 
-Main function for optimized ray casting with adaptive sampling and spatial coherence.
+Main function for optimized ray casting with adaptive sampling.
 """
 function raycast_sign_detection(
   mesh::TriangularMesh,
@@ -371,8 +341,7 @@ function raycast_sign_detection(
   min_rays::Int = 6,
   max_rays::Int = 30,
   confidence_threshold::Float64 = 0.6,
-  use_winding_fallback::Bool = true,
-  use_spatial_coherence::Bool = true
+  use_winding_fallback::Bool = true
 )::Tuple{Vector{Float64}, Vector{Float64}}
   print_info("Using optimized adaptive ray casting for sign detection...")
 
@@ -393,27 +362,20 @@ function raycast_sign_detection(
   signs = Vector{Float64}(undef, ngp)
   confidences = Vector{Float64}(undef, ngp)
 
-  # Check if grid has dimension information for spatial coherence
-  has_grid_dims = isdefined(grid, :nelx) && isdefined(grid, :nely) && isdefined(grid, :nelz)
-
-  # Standard parallel processing without spatial coherence
+  # Parallel processing
   p = Progress(ngp, 1, "Adaptive ray casting: ", 30)
   counter = Atomic{Int}(0)
 
   @threads for i in 1:ngp
     point = points[:, i]
 
-    # No spatial hint
-    hint = SpatialHint(false, 0.0, 0.0)
-
     # Adaptive ray casting
-    (sign, confidence) =
-      adaptive_point_in_mesh_raycast(point, tri_bvh, hint, min_rays, max_rays)
+    (sign, confidence) = adaptive_point_in_mesh_raycast(point, tri_bvh, min_rays, max_rays)
 
     # Fallback for low confidence
     if use_winding_fallback && confidence < confidence_threshold
       sign = generalized_winding_number(point, triangles)
-      confidence = 0.5
+      confidence = 0.8  # Higher confidence for winding number method
     end
 
     signs[i] = sign
