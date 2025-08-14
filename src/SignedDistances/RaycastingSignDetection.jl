@@ -5,12 +5,6 @@ Optimized implementation using ImplicitBVH.jl for acceleration.
 Uses multi-directional ray casting with voting for robustness.
 """
 
-using ImplicitBVH
-using ImplicitBVH: BBox, BSphere
-using LinearAlgebra
-using Random
-using Base.Threads
-
 """
     RaycastResult
 

@@ -9,6 +9,8 @@ using LinearAlgebra
 using ProgressMeter
 using NearestNeighbors
 using Random
+using ImplicitBVH
+using ImplicitBVH: BBox, BSphere
 
 using stl2sdf.TerminalUtils
 using stl2sdf.MeshGrid
