@@ -17,9 +17,6 @@ using stl2sdf.MeshGrid
 using stl2sdf.DataExport
 using stl2sdf
 
-# Volume of the geometry usign Gauss quadreature:
-include("CalcVolumeFromSDF.jl")
-
 # RBF smoothing of SDF, supporting both interpolation and approximation:
 include("RBFs4Smoothing.jl")
 

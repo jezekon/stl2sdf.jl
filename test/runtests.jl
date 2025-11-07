@@ -126,6 +126,16 @@ using BenchmarkTools
         print_info("Combining distances and signs to create SDF")
         sdf_dists = dists .* signs
 
+        # 6. Apply RBF smoothing
+        print_info("Applying RBF smoothing")
+        (fine_sdf, fine_grid) = RBFs_smoothing(
+            sdf_dists,
+            sdf_grid,
+            is_interpolation = :interpolation,
+            grid_refinement = 1.0,
+        )
+
         exportSdfToVTI("$(taskName)_sdf.vti", sdf_grid, sdf_dists, "distance")
+        exportSdfToVTI("fine-$(base_name)_sdf.vti", fine_grid, fine_sdf, "distance")
     end
 end

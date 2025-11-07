@@ -252,57 +252,6 @@ function rbf_interpolation_kdtree(
     return result
 end
 
-"""
-    LS_Threshold(sdf::Array, grid::Array, mesh::Mesh, Exp::Int)
-
-Adjust the level-set function to maintain the volume of the original mesh.
-Uses binary search to find the threshold that gives the desired volume.
-
-# Arguments
-- `sdf::Array`: Signed distance function values
-- `grid::Array`: Grid points
-- `mesh::Mesh`: Original mesh with known volume
-- `Exp::Int`: Precision exponent for convergence criterion
-
-# Returns
-- Float32: Threshold value for the level set function
-"""
-function LS_Threshold(sdf::Array, grid::Array, mesh::Mesh, Exp::Int)
-    # Calculate target volume from mesh properties
-    target_volume = mesh.V_domain
-
-    # Initialize threshold search variables
-    eps = 1.0
-    th_low, th_high = minimum(sdf), maximum(sdf)
-    n = 0
-    th = 0.0
-
-    # Setup arrays for volume calculation
-    dim = size(sdf)
-    shifted_sdf = Array{Float32,3}(undef, dim)
-
-    # Binary search to find the threshold that gives the desired volume
-    while n < 40 && eps > 10.0^(-Exp)
-        th = (th_low + th_high) / 2
-
-        # Convert the level set to SDF format for volume calculation
-        shifted_sdf .= sdf .- th
-
-        # Calculate current volume using the SDF function
-        current_volume = calculate_volume_from_sdf(shifted_sdf, grid)
-
-        # Adjust threshold based on calculated volume
-        eps = abs(target_volume - current_volume)
-        if current_volume > target_volume
-            th_low = th
-        else
-            th_high = th
-        end
-        n += 1
-    end
-
-    return -th
-end
 
 """
     RBFs_smoothing(mesh::Mesh, dist::Vector, my_grid::Grid, Is_interpolation::Bool, 
@@ -324,12 +273,10 @@ Supports both interpolation and approximation approaches.
 - Tuple(Array, Array): Fine SDF values and fine grid points
 """
 function RBFs_smoothing(
-    mesh::Mesh,
     dist::Vector,
     my_grid::Grid,
     Is_interpolation::Bool,
     smooth::Int,
-    taskName::String,
     threshold::Float64 = 1e-3,
 )
     name = Is_interpolation ? "Interpolation" : "Approximation"
@@ -360,23 +307,13 @@ function RBFs_smoothing(
     # Compute level set function threshold for volume preservation
     println("Computing the LSF zero level to meet the volume condition...")
     @time LSF = rbf_interpolation_kdtree(coarse_grid, coarse_grid, weights, kernel)
-    LSF_array = vector_to_array(LSF, my_grid.N .+ 1)
-    th = LS_Threshold(LSF_array, coarse_grid, mesh, 4)
 
     # Perform RBF interpolation on the fine grid
     println("Computing $name on the fine grid...")
     @time fine_LSF = rbf_interpolation_kdtree(fine_grid, coarse_grid, weights, kernel)
 
-    # Adjust level set function to preserve volume
-    fine_LSF_offset = fine_LSF .+ th
-
     # Convert to 3D array for output
-    fine_LSF_offset_array = vector_to_array(fine_LSF_offset, dim)
-    fine_sdf = fine_LSF_offset_array
+    fine_sdf_array = vector_to_array(fine_LSF, dim)
 
-    # Report final volume
-    current_volume = calculate_volume_from_sdf(fine_sdf, fine_grid)
-    @info "Body volume at SDF zero level: $current_volume (target: $(round(mesh.V_domain, digits=4)))"
-
-    return fine_sdf, fine_grid
+    return fine_sdf_array, fine_grid
 end
