@@ -35,23 +35,3 @@ function NodePosition3D(mesh::AbstractMesh)
     EN = NodalCoordinatesInElement(EN_x, EN_y, EN_z)
     return EN # Output contains three arrays - coordinates of nodes for each element (row position = element ID)
 end
-
-# Calculate geometric centers of all elements
-# (These centers are equivalent to Gauss points for first order elements)
-function GeometricCentre(mesh::AbstractMesh, EN::NodalCoordinatesInElement)
-    # Initialize array for element centers
-    Centre = zeros(mesh.nel, length(mesh.X[:, 1]))
-
-    # Calculate center for each element
-    for i = 1:mesh.nel
-        # Average nodal coordinates to get center
-        G_x = mean(EN.x[:, i]) # G_x = dot(EN_x[:, i], N)
-        G_y = mean(EN.y[:, i]) # G_y = dot(EN_y[:, i], N)
-        G_z = mean(EN.z[:, i]) # G_z = dot(EN_z[:, i], N)
-
-        # Store center coordinates
-        Centre[i, :] = [G_x, G_y, G_z]
-    end
-
-    return Centre
-end

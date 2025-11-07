@@ -94,27 +94,11 @@ using BenchmarkTools
 
     if RUN_beam_Mecas
         taskName = "beam_Mecas"
-        N = 180  # Number of cells along the longest side
+        N = 80  # Number of cells along the longest side
 
         # 1. Import STL file
         print_info("Importing STL file: $taskName")
         (X, IEN) = import_stl("../data/$(taskName).stl") # -> Vector of vectors
-
-        # 2. Try Tetgen, fallback to raycast if fails
-        TetMesh = nothing
-        tetgen_success = false
-
-        try
-            print_info("Running Tetgen on $taskName")
-            run_tetgen(taskName, "../data")  # Run in specified directory
-            (X_tet, IEN_tet) = import_tetgen_mesh("../data/$(taskName).1") # -> Vector of vectors
-            TetMesh = Mesh(X_tet, IEN_tet)
-            tetgen_success = true
-            print_success("Tetgen processing successful")
-        catch e
-            print_warning("Tetgen failed: $e")
-            print_info("Will use raycast fallback for sign detection")
-        end
 
         # 3. Create triangular mesh (always needed)
         print_info("Creating triangular mesh")

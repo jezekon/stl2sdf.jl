@@ -1,7 +1,6 @@
 module MeshGrid
 
-export MeshInformations,
-    Mesh,
+export Mesh,
     TriangularMesh,
     Grid,
     LinkedList,
@@ -12,8 +11,7 @@ export MeshInformations,
     generateConnectivityArray,
     find_triangle_position,
     interactive_sdf_grid_setup,
-    noninteractive_sdf_grid_setup,
-    NodePosition3D
+    noninteractive_sdf_grid_setup
 
 using Statistics
 using LinearAlgebra

@@ -28,22 +28,6 @@ function stl_to_sdf(stl_filename::String; options::SDFOptions = SDFOptions())
 
     # 2. Try Tetgen, fallback to raycast if fails
     TetMesh = nothing
-    tetgen_success = false
-
-    try
-        print_info("Running Tetgen on $stl_filename")
-        run_tetgen(base_name, dirname(stl_filename))
-        tetgen_file = joinpath(dirname(stl_filename), "$base_name.1")
-        print_info("Importing Tetgen mesh: $tetgen_file")
-        (X_tet, IEN_tet) = import_tetgen_mesh(tetgen_file)
-        TetMesh = Mesh(X_tet, IEN_tet)
-        tetgen_success = true
-        print_success("Tetgen processing successful")
-    catch e
-        print_warning("Tetgen failed: $e")
-        print_info("Will use raycast fallback for sign detection")
-    end
-
     # 3. Create triangular mesh (always needed)
     print_info("Creating triangular mesh")
     TriMesh = TriangularMesh(X, IEN)

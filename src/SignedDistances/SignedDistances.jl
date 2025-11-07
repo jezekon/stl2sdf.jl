@@ -8,7 +8,6 @@ using StaticArrays
 using LinearAlgebra
 using ProgressMeter
 using NearestNeighbors
-using Random
 using ImplicitBVH
 using ImplicitBVH: BBox, BSphere
 
