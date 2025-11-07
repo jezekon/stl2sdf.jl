@@ -1,6 +1,6 @@
 module SignedDistances
 
-export evalDistancesOnTriMesh, SignDetection, RaycastingSignDetection
+export evalDistancesOnTriMesh, raycast_sign_detection
 
 using Base.Threads
 using Statistics
@@ -20,10 +20,7 @@ using stl2sdf
 # Compute the unsigned distance field:
 include("dfOnTriangularMesh.jl")
 
-# Compute signs:
-include("SignDetection.jl")
-
-# Raycast fallback:
+# Raycast sign detection:
 include("RaycastingSignDetection.jl")
 
 end

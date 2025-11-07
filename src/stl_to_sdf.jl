@@ -62,17 +62,7 @@ function stl_to_sdf(stl_filename::String; options::SDFOptions = SDFOptions())
     (dists, xp) = evalDistancesOnTriMesh(TriMesh, sdf_grid, points)
 
     print_info("Computing signs")
-    signs, confidences = try
-        # Tetrahedral method - add dummy confidences for consistency
-        tet_signs = SignDetection(TetMesh, sdf_grid, points)
-        (tet_signs, ones(Float64, length(tet_signs)))  # confidence = 1.0 for tet method
-    catch e
-        print_warning("Tetrahedral sign detection failed")
-        print_info("Falling back to ray casting method...")
-
-        # Fallback returns (signs, confidences)
-        SignDetection(TriMesh, sdf_grid, points)
-    end
+    (signs, confidences) = raycast_sign_detection(TriMesh, sdf_grid, points)
 
     # Optional: log low confidence points
     if any(c -> c < 0.6, confidences)

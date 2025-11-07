@@ -13,10 +13,10 @@ using BenchmarkTools
     # Test configuration flags
     Import_beam = false
     Import_bunny = false
-    RUN_lin_beam = true
+    RUN_lin_beam = false
     RUN_main_some_opts = false
     RUN_main_opts = false
-    RUN_beam_Mecas = false
+    RUN_beam_Mecas = true
 
     #NOTE:
     if Import_beam
@@ -65,7 +65,7 @@ using BenchmarkTools
 
         ## SFD from triangular mesh:
         (dists, xp) = evalDistancesOnTriMesh(TriMesh, sdf_grid, points) # Vector{Float64}
-        signs = @time SignDetection(TetMesh, sdf_grid, points)
+        (signs, _) = raycast_sign_detection(TriMesh, sdf_grid, points)
         sdf_dists = dists .* signs
 
         exportSdfToVTI(taskName * "_SDF.vti", sdf_grid, sdf_dists, "distance")
@@ -94,7 +94,7 @@ using BenchmarkTools
 
     if RUN_beam_Mecas
         taskName = "beam_Mecas"
-        N = 60  # Number of cells along the longest side
+        N = 180  # Number of cells along the longest side
 
         # 1. Import STL file
         print_info("Importing STL file: $taskName")
@@ -131,17 +131,7 @@ using BenchmarkTools
         (dists, xp) = evalDistancesOnTriMesh(TriMesh, sdf_grid, points)
 
         print_info("Computing signs")
-        signs, confidences = try
-            # Tetrahedral method - add dummy confidences for consistency
-            tet_signs = SignDetection(TetMesh, sdf_grid, points)
-            (tet_signs, ones(Float64, length(tet_signs)))  # confidence = 1.0 for tet method
-        catch e
-            print_warning("Tetrahedral sign detection failed")
-            print_info("Falling back to ray casting method...")
-
-            # Fallback returns (signs, confidences)
-            @time SignDetection(TriMesh, sdf_grid, points)
-        end
+        (signs, confidences) = raycast_sign_detection(TriMesh, sdf_grid, points)
 
         # Optional: log low confidence points
         if any(c -> c < 0.6, confidences)
