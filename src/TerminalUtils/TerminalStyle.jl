@@ -4,12 +4,12 @@ function print_info(msg::String)
     leading_newlines = length(match(r"^\n*", msg).match)
     # Remove leading newlines and get clean message
     cleaned_msg = lstrip(msg, '\n')
-    
+
     # Print the leading newlines first if any exist
     if leading_newlines > 0
         print("\n" ^ leading_newlines)
     end
-    
+
     # Print the formatted message
     println("\e[1;34m[INFO] $(cleaned_msg)\e[0m")
 end
@@ -18,7 +18,7 @@ end
 function print_error(msg::String)
     leading_newlines = length(match(r"^\n*", msg).match)
     cleaned_msg = lstrip(msg, '\n')
-    
+
     if leading_newlines > 0
         print("\n" ^ leading_newlines)
     end
@@ -29,7 +29,7 @@ end
 function print_warning(msg::String)
     leading_newlines = length(match(r"^\n*", msg).match)
     cleaned_msg = lstrip(msg, '\n')
-    
+
     if leading_newlines > 0
         print("\n" ^ leading_newlines)
     end
@@ -40,7 +40,7 @@ end
 function print_success(msg::String)
     leading_newlines = length(match(r"^\n*", msg).match)
     cleaned_msg = lstrip(msg, '\n')
-    
+
     if leading_newlines > 0
         print("\n" ^ leading_newlines)
     end
@@ -51,7 +51,7 @@ end
 function print_data(msg::String)
     leading_newlines = length(match(r"^\n*", msg).match)
     cleaned_msg = lstrip(msg, '\n')
-    
+
     if leading_newlines > 0
         print("\n" ^ leading_newlines)
     end

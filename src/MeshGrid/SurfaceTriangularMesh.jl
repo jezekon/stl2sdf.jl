@@ -62,7 +62,7 @@ function find_triangle_position(EN::NodalCoordinatesInElement, vertices::Matrix)
     # Preprocess input vertices to sort each vertex set for unordered comparison
     sorted_vertices = sort!(vec(vertices))
 
-    for i in 1:size(EN.x, 2)  # Iterate over each triangle (column)
+    for i = 1:size(EN.x, 2)  # Iterate over each triangle (column)
         # Extract and sort the vertices of the current triangle for comparison
         current_vertices = sort!(vec([EN.x[:, i] EN.y[:, i] EN.z[:, i]]))
 

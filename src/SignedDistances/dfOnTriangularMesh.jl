@@ -21,67 +21,68 @@ function evalDistancesOnTriMesh(mesh::TriangularMesh, grid::Grid, points::Matrix
     # Convert the triangular mesh into a format suitable for KD-tree operations
     # Preprocessing all triangles to create an efficient searchable structure
     triangle_data = prepare_triangle_data(mesh)
-    
+
     # println("Creating KD-tree for mesh vertices...")
     # Create a KD-tree from all mesh vertices for nearest neighbor searches
     vtx_kdtree = KDTree(mesh.X)
-    
+
     # Convert the triangle data to a format suitable for range searches
-    triangle_centers = Matrix{Float64}(hcat([triangle_data[i].center for i in 1:length(triangle_data)]...))
-    
+    triangle_centers =
+        Matrix{Float64}(hcat([triangle_data[i].center for i = 1:length(triangle_data)]...))
+
     # println("Creating KD-tree for triangle centers...")
     # Create a KD-tree from triangle centers for faster triangle queries
     tri_kdtree = KDTree(triangle_centers)
-    
+
     ngp = grid.ngp
     nsd = mesh.nsd
     nel = mesh.nel
-    
+
     # Use large negative value for initialization of distances
     big = -1.0e10
     dist = big * ones(Float64, ngp)
     xp = zeros(Float64, nsd, ngp)
-    
+
     # Set search radius based on grid cell size 
     # (can be adjusted based on mesh characteristics)
     search_radius = 2.5 * grid.cell_size
-    
+
     println("Computing distances to triangular mesh...")
-    
+
     # Create thread-local storage for parallel processing
     nthreads = Threads.nthreads()
-    dist_local = [fill(big, ngp) for _ in 1:nthreads]
-    xp_local = [zeros(Float64, nsd, ngp) for _ in 1:nthreads]
-    
+    dist_local = [fill(big, ngp) for _ = 1:nthreads]
+    xp_local = [zeros(Float64, nsd, ngp) for _ = 1:nthreads]
+
     # Create a progress bar
     p = Progress(ngp, 1, "Computing distances: ", 30)
-    
+
     # Use atomic counter for progress tracking
     counter = Atomic{Int}(0)
     update_interval = max(1, div(ngp, 100))
-    
+
     # Process points in batches to improve cache efficiency
     batch_size = 128
     num_batches = ceil(Int, ngp / batch_size)
-    
+
     # Parallel processing of points
-    Threads.@threads for batch in 1:num_batches
+    Threads.@threads for batch = 1:num_batches
         tid = Threads.threadid()
         start_idx = (batch - 1) * batch_size + 1
         end_idx = min(batch * batch_size, ngp)
-        
-        for v in start_idx:end_idx
+
+        for v = start_idx:end_idx
             point = @view points[:, v]
-            
+
             # First, quickly find nearest triangles in a radius
             # This is much faster than checking all triangles or using grid cells
             tri_indices = inrange(tri_kdtree, point, search_radius)
-            
+
             # If no triangles found in range, try with nearest vertex approach
             if isempty(tri_indices)
                 # Find nearest vertices to the point
                 idxs, dists = knn(vtx_kdtree, point, 3)
-                
+
                 # Collect all triangles containing these vertices
                 vtx_tri_indices = Set{Int}()
                 for vtx_idx in idxs
@@ -91,40 +92,45 @@ function evalDistancesOnTriMesh(mesh::TriangularMesh, grid::Grid, points::Matrix
                 end
                 tri_indices = collect(vtx_tri_indices)
             end
-            
+
             # Initialize minimum distance for this point
             min_dist = abs(dist_local[tid][v])
             min_proj = zeros(Float64, nsd)
-            
+
             # Process all candidate triangles
             for el in tri_indices
                 # Get triangle data
                 tri_data = triangle_data[el]
-                
+
                 # Quick AABB check (early rejection)
-                if !point_in_box_range(point, tri_data.aabb_min, tri_data.aabb_max, min_dist)
+                if !point_in_box_range(
+                    point,
+                    tri_data.aabb_min,
+                    tri_data.aabb_max,
+                    min_dist,
+                )
                     continue
                 end
-                
+
                 # Extract triangle vertices
                 x₁, x₂, x₃ = tri_data.vertices
-                
+
                 # Triangle normal
                 n = tri_data.normal
-                
+
                 # Compute detailed point-to-triangle distance
                 λ = barycentricCoordinates(x₁, x₂, x₃, n, point)
-                
+
                 # Initialize projection point and distance check flag
                 xₚ = zeros(Float64, nsd)
                 isFaceOrEdge = false
-                
+
                 # Check if projection is inside triangle face
                 if minimum(λ) >= 0.0
                     # Point projects onto triangle face
                     xₚ = λ[1] * x₁ + λ[2] * x₂ + λ[3] * x₃
                     dist_tmp = norm(point - xₚ)
-                    
+
                     # Update if closer than current minimum
                     if dist_tmp < min_dist
                         min_dist = dist_tmp
@@ -137,15 +143,15 @@ function evalDistancesOnTriMesh(mesh::TriangularMesh, grid::Grid, points::Matrix
                         edge = tri_data.edges[j]
                         xᵥ = tri_data.vertices[j]
                         L = tri_data.edge_lengths[j]
-                        
+
                         # Project point onto edge line
                         P = dot(point - xᵥ, edge / L)
-                        
+
                         # Check if projection is on the edge segment
                         if P >= 0 && P <= L
                             xₚ = xᵥ + (edge / L) * P
                             dist_tmp = norm(point - xₚ)
-                            
+
                             # Update if closer than current minimum
                             if dist_tmp < min_dist
                                 min_dist = dist_tmp
@@ -154,13 +160,13 @@ function evalDistancesOnTriMesh(mesh::TriangularMesh, grid::Grid, points::Matrix
                             end
                         end
                     end
-                    
+
                     # If no face/edge projection found, check vertices
                     if !isFaceOrEdge
                         # Find closest vertex
                         vertex_dists = [norm(point - v) for v in tri_data.vertices]
                         dist_tmp, idx = findmin(vertex_dists)
-                        
+
                         # Update if closer than current minimum
                         if dist_tmp < min_dist
                             min_dist = dist_tmp
@@ -169,13 +175,13 @@ function evalDistancesOnTriMesh(mesh::TriangularMesh, grid::Grid, points::Matrix
                     end
                 end
             end
-            
+
             # Update thread-local distance and projection
             if min_dist < abs(dist_local[tid][v])
                 dist_local[tid][v] = min_dist
                 xp_local[tid][:, v] = min_proj
             end
-            
+
             # Update progress counter
             count = atomic_add!(counter, 1)
             if count % update_interval == 0 && Threads.threadid() == 1
@@ -186,19 +192,19 @@ function evalDistancesOnTriMesh(mesh::TriangularMesh, grid::Grid, points::Matrix
     finish!(p)
 
     # Merge thread-local results
-    for i in 1:ngp
-        min_dist, min_idx = findmin([abs(dist_local[tid][i]) for tid in 1:nthreads])
+    for i = 1:ngp
+        min_dist, min_idx = findmin([abs(dist_local[tid][i]) for tid = 1:nthreads])
         dist[i] = min_dist
         xp[:, i] = xp_local[min_idx][:, i]
     end
-    
+
     # Apply distance truncation if needed
     for i in eachindex(dist)
         if abs(dist[i]) > norm(grid.cell_size)
             dist[i] = sign(dist[i]) * norm(grid.cell_size)
         end
     end
-    
+
     return dist, xp
 end
 
@@ -222,7 +228,8 @@ function barycentricCoordinates(
     x₂::Vector{Float64}, # Second vertex of the triangle
     x₃::Vector{Float64}, # Third vertex of the triangle
     n::Vector{Float64},  # Unit normal to the triangle face
-    x)                  # Point for which to compute barycentric coordinates
+    x,
+)                  # Point for which to compute barycentric coordinates
 
     # Matrix for solving the barycentric coordinates
     A = [
@@ -230,14 +237,10 @@ function barycentricCoordinates(
         (x₁[3]*n[1]-x₁[1]*n[3]) (x₂[3]*n[1]-x₂[1]*n[3]) (x₃[3]*n[1]-x₃[1]*n[3])
         (x₁[1]*n[2]-x₁[2]*n[1]) (x₂[1]*n[2]-x₂[2]*n[1]) (x₃[1]*n[2]-x₃[2]*n[1])
     ]
-    
+
     # Right-hand side vector
-    b = [
-        x[2] * n[3] - x[3] * n[2],
-        x[3] * n[1] - x[1] * n[3],
-        x[1] * n[2] - x[2] * n[1],
-    ]
-    
+    b = [x[2] * n[3] - x[3] * n[2], x[3] * n[1] - x[1] * n[3], x[1] * n[2] - x[2] * n[1]]
+
     # Find the component with maximum normal value for numerical stability
     n_max, i_max = findmax(abs.(n))
     A[i_max, :] = [1.0 1.0 1.0]
@@ -269,7 +272,8 @@ function SelectProjectedNodes(
     mesh::TriangularMesh,
     grid::Grid,
     xp::Matrix{Float64},
-    points::Matrix{Float64})
+    points::Matrix{Float64},
+)
 
     ngp = grid.ngp # number of nodes in grid
     nsd = mesh.nsd # number of spatial dimensions
@@ -292,7 +296,7 @@ function SelectProjectedNodes(
     end
 
     # Calculate projection distance statistics
-    distances = [norm(X[i] - Xp[i]) for i in 1:length(X)]
+    distances = [norm(X[i] - Xp[i]) for i = 1:length(X)]
     mean_PD = mean(distances)
     max_PD = maximum(distances)
 
@@ -324,45 +328,42 @@ This significantly speeds up distance calculations by avoiding redundant computa
 """
 function prepare_triangle_data(mesh::TriangularMesh)
     triangle_data = Vector{TriangleData}(undef, mesh.nel)
-    
-    for el in 1:mesh.nel
+
+    for el = 1:mesh.nel
         # Extract triangle vertices
         vtx_indices = mesh.IEN[:, el]
-        vertices = [mesh.X[:, vtx_indices[1]], mesh.X[:, vtx_indices[2]], mesh.X[:, vtx_indices[3]]]
-        
+        vertices = [
+            mesh.X[:, vtx_indices[1]],
+            mesh.X[:, vtx_indices[2]],
+            mesh.X[:, vtx_indices[3]],
+        ]
+
         # Compute triangle edges
         edges = [
             vertices[2] - vertices[1],
             vertices[3] - vertices[2],
-            vertices[1] - vertices[3]
+            vertices[1] - vertices[3],
         ]
-        
+
         # Compute edge lengths
         edge_lengths = [norm(edge) for edge in edges]
-        
+
         # Compute normal
         normal = cross(edges[1], -edges[3])
         normal = normal / norm(normal)
-        
+
         # Compute center point
         center = (vertices[1] + vertices[2] + vertices[3]) / 3.0
-        
+
         # Compute axis-aligned bounding box
-        aabb_min = [minimum([v[i] for v in vertices]) for i in 1:3]
-        aabb_max = [maximum([v[i] for v in vertices]) for i in 1:3]
-        
+        aabb_min = [minimum([v[i] for v in vertices]) for i = 1:3]
+        aabb_max = [maximum([v[i] for v in vertices]) for i = 1:3]
+
         # Store processed data
-        triangle_data[el] = TriangleData(
-            vertices,
-            edges,
-            edge_lengths,
-            normal,
-            center,
-            aabb_min,
-            aabb_max
-        )
+        triangle_data[el] =
+            TriangleData(vertices, edges, edge_lengths, normal, center, aabb_min, aabb_max)
     end
-    
+
     return triangle_data
 end
 
@@ -382,7 +383,7 @@ This is used for quick rejection testing before more expensive distance calculat
 - `Bool`: True if the point is within range of the AABB, false otherwise
 """
 function point_in_box_range(point, box_min, box_max, max_dist)
-    for i in 1:length(point)
+    for i = 1:length(point)
         if point[i] < box_min[i] - max_dist || point[i] > box_max[i] + max_dist
             return false
         end

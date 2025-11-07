@@ -4,7 +4,7 @@ function exportToVTU(
     X::Vector{Vector{Float64}},
     IEN::Vector{Vector{Int64}},
     VTK_CODE::Int64,
-    rho::Union{Vector{Float64}, Nothing} = nothing
+    rho::Union{Vector{Float64},Nothing} = nothing,
 )
 
     nnp = length(X)
@@ -20,14 +20,7 @@ function exportToVTU(
         "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\">",
     )
     println(io, "  <UnstructuredGrid>")
-    println(
-        io,
-        "    <Piece NumberOfPoints=\"",
-        nnp,
-        "\" NumberOfCells=\"",
-        nel,
-        "\">",
-    )
+    println(io, "    <Piece NumberOfPoints=\"", nnp, "\" NumberOfCells=\"", nel, "\">")
 
     println(io, "	  <Points>")
     println(
@@ -48,10 +41,7 @@ function exportToVTU(
     println(io, "	  </Points>")
 
     println(io, "      <Cells>")
-    println(
-        io,
-        "		  <DataArray type=\"Int32\" Name=\"connectivity\" format=\"ascii\">",
-    )
+    println(io, "		  <DataArray type=\"Int32\" Name=\"connectivity\" format=\"ascii\">")
 
     for el = 1:nel
         print(io, "         ")
@@ -62,18 +52,12 @@ function exportToVTU(
     end
 
     println(io, "        </DataArray>")
-    println(
-        io,
-        "        <DataArray type=\"Int32\" Name=\"offsets\" format=\"ascii\">",
-    )
-    for i = nen:nen:nen*nel
+    println(io, "        <DataArray type=\"Int32\" Name=\"offsets\" format=\"ascii\">")
+    for i = nen:nen:(nen*nel)
         println(io, "          ", i)
     end
     println(io, "        </DataArray>")
-    println(
-        io,
-        "        <DataArray type=\"UInt8\" Name=\"types\" format=\"ascii\">",
-    )
+    println(io, "        <DataArray type=\"UInt8\" Name=\"types\" format=\"ascii\">")
     for el = 1:nel
         println(io, "          ", VTK_CODE)
     end
@@ -81,13 +65,16 @@ function exportToVTU(
     println(io, "      </Cells>")
 
     if (rho !== nothing)
-    println(io, "      <PointData Scalars=\"scalars\">")
-    println(io, "           <DataArray type=\"Float32\" Name=\"density\" Format=\"ascii\">")
-    for A = 1:nnp
-        println(io, "             ", rho[A])
-    end
-    println(io, "           </DataArray>")
-    println(io, "      </PointData>")
+        println(io, "      <PointData Scalars=\"scalars\">")
+        println(
+            io,
+            "           <DataArray type=\"Float32\" Name=\"density\" Format=\"ascii\">",
+        )
+        for A = 1:nnp
+            println(io, "             ", rho[A])
+        end
+        println(io, "           </DataArray>")
+        println(io, "      </PointData>")
     end
 
 
