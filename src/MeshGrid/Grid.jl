@@ -21,7 +21,7 @@ mutable struct Grid
 
         # Calculate number of cells in each dimension
         N = ceil.(Int64, (AABB_max .- AABB_min) / cell_size)
-        
+
         # Adjust AABB_max to ensure exact fit with cells
         AABB_max = AABB_min + N .* cell_size
 
@@ -55,7 +55,9 @@ mutable struct LinkedList # division of regular grid into regions
 
         # Calculate grid indices for each point
         I = floor.(N .* (X .- AABB_min) ./ (AABB_max .- AABB_min))
-        Ia = Int.(I[3, :] .* (N[1] + 1) * (N[2] + 1) .+ I[2, :] .* (N[1] + 1) .+ I[1, :] .+ 1)
+        Ia = Int.(
+            I[3, :] .* (N[1] + 1) * (N[2] + 1) .+ I[2, :] .* (N[1] + 1) .+ I[1, :] .+ 1,
+        )
 
         # Construct the linked list
         for i = 1:np
@@ -97,21 +99,21 @@ end
 function generateConnectivityArray(grid::Grid)::Vector{Vector{Int64}}
     N = grid.N .+ 1 # N is now the number of vertices in a row, not the number of cells
     # Initialize array of element connectivity
-    IEN = [fill(0, 8) for _ in 1:prod(N.-1)]
+    IEN = [fill(0, 8) for _ = 1:prod(N .- 1)]
     m = 1
     # Generate 8-node connectivity for each hexahedral element
-    for k = 1:N[3]-1
-        for j = 1:N[2]-1
-            for i = 1:N[1]-1
+    for k = 1:(N[3]-1)
+        for j = 1:(N[2]-1)
+            for i = 1:(N[1]-1)
                 IEN[m] = [
-                    Int((k-1) * N[1]*N[2] + (j-1) * N[1] + i ),
-                    Int((k-1) * N[1]*N[2] + (j-1) * N[1] + i+1 ),
-                    Int((k-1) * N[1]*N[2] + j * N[1] + i+1 ),
-                    Int((k-1) * N[1]*N[2] + j * N[1] + i ),
-                    Int(k * N[1]*N[2] + (j-1) * N[1] + i),
-                    Int(k * N[1]*N[2] + (j-1) * N[1] + i+1 ),
-                    Int(k * N[1]*N[2] + j * N[1] + i+1 ),
-                    Int(k * N[1]*N[2] + j * N[1] + i ),
+                    Int((k-1) * N[1] * N[2] + (j-1) * N[1] + i),
+                    Int((k-1) * N[1] * N[2] + (j-1) * N[1] + i + 1),
+                    Int((k-1) * N[1] * N[2] + j * N[1] + i + 1),
+                    Int((k-1) * N[1] * N[2] + j * N[1] + i),
+                    Int(k * N[1] * N[2] + (j-1) * N[1] + i),
+                    Int(k * N[1] * N[2] + (j-1) * N[1] + i + 1),
+                    Int(k * N[1] * N[2] + j * N[1] + i + 1),
+                    Int(k * N[1] * N[2] + j * N[1] + i),
                 ]
                 m = m+1
             end
@@ -129,8 +131,9 @@ function calculateMiniAABB_grid(
     N::Vector{Int64},    # Grid dimensions
     AABB_min::Vector{Float64}, # Grid minimum bounds
     AABB_max::Vector{Float64}, # Grid maximum bounds
-    nsd::Int)            # Number of spatial dimensions
-    
+    nsd::Int,
+)            # Number of spatial dimensions
+
     # Calculate bounds of the geometry with safety margin
     Xt_min = minimum(Xt, dims = 2) .- δ # bottom left corner coordinates
     Xt_max = maximum(Xt, dims = 2) .+ δ # top right corner coordinates

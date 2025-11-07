@@ -1,113 +1,113 @@
 # Define a struct to hold optional parameters
 struct SDFOptions
-  smoothing_method::Symbol
-  grid_refinement::Int
-  grid_step::Union{Float64, Nothing}
+    smoothing_method::Symbol
+    grid_refinement::Int
+    grid_step::Union{Float64,Nothing}
 
-  # Constructor with default values
-  function SDFOptions(;
-    smoothing_method::Symbol = :interpolation,
-    grid_refinement::Int = 1,
-    grid_step::Union{Float64, Nothing} = nothing
-  )
-    return new(smoothing_method, grid_refinement, grid_step)
-  end
+    # Constructor with default values
+    function SDFOptions(;
+        smoothing_method::Symbol = :interpolation,
+        grid_refinement::Int = 1,
+        grid_step::Union{Float64,Nothing} = nothing,
+    )
+        return new(smoothing_method, grid_refinement, grid_step)
+    end
 end
 
 function stl_to_sdf(stl_filename::String; options::SDFOptions = SDFOptions())
-  # Check inputs
-  @assert options.smoothing_method in [:interpolation, :approximation] "Smoothing method must be :interpolation or :approximation"
-  @assert options.grid_refinement in [1, 2] "Grid refinement must be 1 or 2"
+    # Check inputs
+    @assert options.smoothing_method in [:interpolation, :approximation] "Smoothing method must be :interpolation or :approximation"
+    @assert options.grid_refinement in [1, 2] "Grid refinement must be 1 or 2"
 
-  # Extract base name without extension
-  base_name = splitext(basename(stl_filename))[1]
+    # Extract base name without extension
+    base_name = splitext(basename(stl_filename))[1]
 
-  # 1. Import STL file
-  print_info("Importing STL file: $stl_filename")
-  (X, IEN) = import_stl(stl_filename)
+    # 1. Import STL file
+    print_info("Importing STL file: $stl_filename")
+    (X, IEN) = import_stl(stl_filename)
 
-  # 2. Try Tetgen, fallback to raycast if fails
-  TetMesh = nothing
-  tetgen_success = false
+    # 2. Try Tetgen, fallback to raycast if fails
+    TetMesh = nothing
+    tetgen_success = false
 
-  try
-    print_info("Running Tetgen on $stl_filename")
-    run_tetgen(base_name, dirname(stl_filename))
-    tetgen_file = joinpath(dirname(stl_filename), "$base_name.1")
-    print_info("Importing Tetgen mesh: $tetgen_file")
-    (X_tet, IEN_tet) = import_tetgen_mesh(tetgen_file)
-    TetMesh = Mesh(X_tet, IEN_tet)
-    tetgen_success = true
-    print_success("Tetgen processing successful")
-  catch e
-    print_warning("Tetgen failed: $e")
-    print_info("Will use raycast fallback for sign detection")
-  end
+    try
+        print_info("Running Tetgen on $stl_filename")
+        run_tetgen(base_name, dirname(stl_filename))
+        tetgen_file = joinpath(dirname(stl_filename), "$base_name.1")
+        print_info("Importing Tetgen mesh: $tetgen_file")
+        (X_tet, IEN_tet) = import_tetgen_mesh(tetgen_file)
+        TetMesh = Mesh(X_tet, IEN_tet)
+        tetgen_success = true
+        print_success("Tetgen processing successful")
+    catch e
+        print_warning("Tetgen failed: $e")
+        print_info("Will use raycast fallback for sign detection")
+    end
 
-  # 3. Create triangular mesh (always needed)
-  print_info("Creating triangular mesh")
-  TriMesh = TriangularMesh(X, IEN)
+    # 3. Create triangular mesh (always needed)
+    print_info("Creating triangular mesh")
+    TriMesh = TriangularMesh(X, IEN)
 
-  # 4. Create SDF grid
-  print_info("Setting up SDF grid")
-  if options.grid_step === nothing
-    sdf_grid = interactive_sdf_grid_setup(TriMesh)
-  else
-    sdf_grid = noninteractive_sdf_grid_setup(TriMesh, options.grid_step)
-  end
-  points = generateGridPoints(sdf_grid)
+    # 4. Create SDF grid
+    print_info("Setting up SDF grid")
+    if options.grid_step === nothing
+        sdf_grid = interactive_sdf_grid_setup(TriMesh)
+    else
+        sdf_grid = noninteractive_sdf_grid_setup(TriMesh, options.grid_step)
+    end
+    points = generateGridPoints(sdf_grid)
 
-  # 5. Compute SDF
-  print_info("Computing unsigned distances")
-  (dists, xp) = evalDistancesOnTriMesh(TriMesh, sdf_grid, points)
+    # 5. Compute SDF
+    print_info("Computing unsigned distances")
+    (dists, xp) = evalDistancesOnTriMesh(TriMesh, sdf_grid, points)
 
-  print_info("Computing signs")
-  signs, confidences = try
-    # Tetrahedral method - add dummy confidences for consistency
-    tet_signs = SignDetection(TetMesh, sdf_grid, points)
-    (tet_signs, ones(Float64, length(tet_signs)))  # confidence = 1.0 for tet method
-  catch e
-    print_warning("Tetrahedral sign detection failed")
-    print_info("Falling back to ray casting method...")
+    print_info("Computing signs")
+    signs, confidences = try
+        # Tetrahedral method - add dummy confidences for consistency
+        tet_signs = SignDetection(TetMesh, sdf_grid, points)
+        (tet_signs, ones(Float64, length(tet_signs)))  # confidence = 1.0 for tet method
+    catch e
+        print_warning("Tetrahedral sign detection failed")
+        print_info("Falling back to ray casting method...")
 
-    # Fallback returns (signs, confidences)
-    SignDetection(TriMesh, sdf_grid, points)
-  end
+        # Fallback returns (signs, confidences)
+        SignDetection(TriMesh, sdf_grid, points)
+    end
 
-  # Optional: log low confidence points
-  if any(c -> c < 0.6, confidences)
-    low_conf_count = count(c -> c < 0.6, confidences)
-    print_warning("$(low_conf_count) points have low confidence (<0.6)")
-  end
+    # Optional: log low confidence points
+    if any(c -> c < 0.6, confidences)
+        low_conf_count = count(c -> c < 0.6, confidences)
+        print_warning("$(low_conf_count) points have low confidence (<0.6)")
+    end
 
-  print_info("Combining distances and signs to create SDF")
-  sdf_dists = dists .* signs
+    print_info("Combining distances and signs to create SDF")
+    sdf_dists = dists .* signs
 
-  # 6. Apply RBF smoothing
-  if tetgen_success && TetMesh !== nothing
-    print_info("Applying RBF smoothing")
-    is_interpolation = (options.smoothing_method === :interpolation)
-    (fine_sdf, fine_grid) = RBFs_smoothing(
-      TetMesh,
-      sdf_dists,
-      sdf_grid,
-      is_interpolation,
-      options.grid_refinement,
-      base_name
-    )
-  end
+    # 6. Apply RBF smoothing
+    if tetgen_success && TetMesh !== nothing
+        print_info("Applying RBF smoothing")
+        is_interpolation = (options.smoothing_method === :interpolation)
+        (fine_sdf, fine_grid) = RBFs_smoothing(
+            TetMesh,
+            sdf_dists,
+            sdf_grid,
+            is_interpolation,
+            options.grid_refinement,
+            base_name,
+        )
+    end
 
-  # 7. Save data to JLD2 file
-  # sdf_output_file = "$(base_name)_sdf.jld2"
-  # grid_output_file = "$(base_name)_grid.jld2"
-  # print_info("Saving SDF data to $sdf_output_file and $grid_output_file")
-  # @save sdf_output_file fine_sdf
-  # @save grid_output_file fine_grid
+    # 7. Save data to JLD2 file
+    # sdf_output_file = "$(base_name)_sdf.jld2"
+    # grid_output_file = "$(base_name)_grid.jld2"
+    # print_info("Saving SDF data to $sdf_output_file and $grid_output_file")
+    # @save sdf_output_file fine_sdf
+    # @save grid_output_file fine_grid
 
-  # Export the results as VTI format for visualization
-  print_info("Exporting SDF to VTI file")
-  exportSdfToVTI("$(base_name)_sdf.vti", sdf_grid, sdf_dists, "distance")
+    # Export the results as VTI format for visualization
+    print_info("Exporting SDF to VTI file")
+    exportSdfToVTI("$(base_name)_sdf.vti", sdf_grid, sdf_dists, "distance")
 
-  # Return results
-  # return (sdf_dists, sdf_grid, fine_sdf, fine_grid)
+    # Return results
+    # return (sdf_dists, sdf_grid, fine_sdf, fine_grid)
 end

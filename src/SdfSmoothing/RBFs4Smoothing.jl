@@ -38,9 +38,9 @@ function create_grid(NoC::Vector, grid)
     xmin, ymin, zmin = Float32.(grid.AABB_min)
     xmax, ymax, zmax = Float32.(grid.AABB_max)
 
-    x = range(Float32(xmin), Float32(xmax), length=nx)
-    y = range(Float32(ymin), Float32(ymax), length=ny)
-    z = range(Float32(zmin), Float32(zmax), length=nz)
+    x = range(Float32(xmin), Float32(xmax), length = nx)
+    y = range(Float32(ymin), Float32(ymax), length = ny)
+    z = range(Float32(zmin), Float32(zmax), length = nz)
 
     return [[Float32(x), Float32(y), Float32(z)] for x in x, y in y, z in z]
 end
@@ -66,9 +66,9 @@ function create_smooth_grid(grid, smooth::Int)
     dx = (xmax - xmin) / (nx - 1)
 
     # Generate grid points using explicit arithmetic
-    x = [xmin + (i - 1) * dx for i in 1:nx]
-    y = [ymin + (j - 1) * dx for j in 1:ny]
-    z = [zmin + (k - 1) * dx for k in 1:nz]
+    x = [xmin + (i - 1) * dx for i = 1:nx]
+    y = [ymin + (j - 1) * dx for j = 1:ny]
+    z = [zmin + (k - 1) * dx for k = 1:nz]
 
     return (dx, [[x_i, y_j, z_k] for x_i in x, y_j in y, z_k in z])
 end
@@ -142,19 +142,19 @@ Uses a KD-tree for spatial queries to find points within interaction radius.
 function compute_sparse_kernel_matrix(grid, kernel::LimitedRangeRBFKernel)
     # Convert grid to a matrix for KDTree
     points = reduce(hcat, grid)
-    
+
     # Calculate interaction radius based on kernel parameters
     interaction_radius = kernel.σ * sqrt(-log(kernel.threshold))
-    
+
     # Create KD-tree for efficient neighbor searches
     kdtree = KDTree(points)
-    
+
     I, J, V = Int[], Int[], Float32[]
-    
-    for i in 1:size(points, 2)
+
+    for i = 1:size(points, 2)
         # Find all points within interaction_radius
         idxs = inrange(kdtree, points[:, i], interaction_radius)
-        
+
         for j in idxs
             if j >= i  # Avoid duplicate calculations
                 value = Float32(kernel(grid[i], grid[j]))
@@ -171,7 +171,7 @@ function compute_sparse_kernel_matrix(grid, kernel::LimitedRangeRBFKernel)
             end
         end
     end
-    
+
     return sparse(I, J, V, length(grid), length(grid))
 end
 
@@ -216,7 +216,12 @@ Uses KD-tree for efficient spatial queries.
 # Returns
 - Vector{Float32}: Interpolated values at fine grid points
 """
-function rbf_interpolation_kdtree(fine_grid::Array, coarse_grid::Array, weights_f32::Vector{Float32}, kernel::LimitedRangeRBFKernel)
+function rbf_interpolation_kdtree(
+    fine_grid::Array,
+    coarse_grid::Array,
+    weights_f32::Vector{Float32},
+    kernel::LimitedRangeRBFKernel,
+)
     kdtree = KDTree(reduce(hcat, coarse_grid))
     max_distance = Float32(sqrt(-log(kernel.threshold) * kernel.σ^2))
 
@@ -228,7 +233,7 @@ function rbf_interpolation_kdtree(fine_grid::Array, coarse_grid::Array, weights_
     function update_progress()
         new_progress = atomic_add!(progress, 1)
         if new_progress % 100 == 0 || new_progress == total
-            percent = round(new_progress / total * 100, digits=1)
+            percent = round(new_progress / total * 100, digits = 1)
             bar = "="^Int(floor(percent / 2))
             @printf("\rProgress: [%-50s] %.1f%% (%d/%d)", bar, percent, new_progress, total)
         end
@@ -265,27 +270,27 @@ Uses binary search to find the threshold that gives the desired volume.
 function LS_Threshold(sdf::Array, grid::Array, mesh::Mesh, Exp::Int)
     # Calculate target volume from mesh properties
     target_volume = mesh.V_domain
-    
+
     # Initialize threshold search variables
     eps = 1.0
     th_low, th_high = minimum(sdf), maximum(sdf)
     n = 0
     th = 0.0
-    
+
     # Setup arrays for volume calculation
     dim = size(sdf)
     shifted_sdf = Array{Float32,3}(undef, dim)
-    
+
     # Binary search to find the threshold that gives the desired volume
     while n < 40 && eps > 10.0^(-Exp)
         th = (th_low + th_high) / 2
-        
+
         # Convert the level set to SDF format for volume calculation
         shifted_sdf .= sdf .- th
-        
+
         # Calculate current volume using the SDF function
         current_volume = calculate_volume_from_sdf(shifted_sdf, grid)
-        
+
         # Adjust threshold based on calculated volume
         eps = abs(target_volume - current_volume)
         if current_volume > target_volume
@@ -295,7 +300,7 @@ function LS_Threshold(sdf::Array, grid::Array, mesh::Mesh, Exp::Int)
         end
         n += 1
     end
-    
+
     return -th
 end
 
@@ -325,7 +330,7 @@ function RBFs_smoothing(
     Is_interpolation::Bool,
     smooth::Int,
     taskName::String,
-    threshold::Float64=1e-3
+    threshold::Float64 = 1e-3,
 )
     name = Is_interpolation ? "Interpolation" : "Approximation"
 
@@ -348,9 +353,9 @@ function RBFs_smoothing(
 
     # Compute weights on the coarse grid
     println("Computing weights on the coarse grid...")
-    weights = Is_interpolation ?
-              (@time compute_rbf_weights(coarse_grid, raw_SDF, kernel)) :
-              vec(raw_SDF)
+    weights =
+        Is_interpolation ? (@time compute_rbf_weights(coarse_grid, raw_SDF, kernel)) :
+        vec(raw_SDF)
 
     # Compute level set function threshold for volume preservation
     println("Computing the LSF zero level to meet the volume condition...")

@@ -11,13 +11,13 @@ function import_stl(filename::String)
     try
         # Load the STL file using FileIO (which uses MeshIO under the hood)
         mesh = load(filename)
-        
+
         # Extract raw vertices and faces
         raw_vertices, raw_faces = extract_raw_mesh_data(mesh)
-        
+
         # Process the mesh to remove duplicates (just like the original implementation)
         @time (X, IEN) = process_stl_mesh(raw_vertices, raw_faces)
-        
+
         return X, IEN
     catch e
         # Fallback to original implementation if MeshIO has issues
@@ -30,23 +30,23 @@ function extract_raw_mesh_data(mesh)
     # Extract vertices 
     vertices = Vector{Vector{Float64}}()
     raw_faces = Vector{Vector{Int}}()
-    
+
     # Try to extract vertices and faces based on mesh structure
     try
         # Extract vertices - converting to the expected format
         points = get_vertices(mesh)
         vertices = [Vector{Float64}([v[1], v[2], v[3]]) for v in points]
-        
+
         # Extract faces - this will depend on mesh representation
         # If faces are represented as triangles with direct vertex indices
         faces = get_faces(mesh)
-        for i in 1:length(faces)
+        for i = 1:length(faces)
             face = faces[i]
             # Create a new triangle with indices into our vertices array
             triangle = Vector{Int}([(i-1)*3 + 1, (i-1)*3 + 2, (i-1)*3 + 3])
             push!(raw_faces, triangle)
         end
-        
+
         return vertices, raw_faces
     catch e
         @warn "Error extracting mesh data: $e"
@@ -65,7 +65,7 @@ function get_vertices(mesh)
             continue
         end
     end
-    
+
     # Try to access through GeometryBasics methods
     try
         return coordinates(mesh)
@@ -89,7 +89,7 @@ function get_faces(mesh)
             continue
         end
     end
-    
+
     # Try to access through GeometryBasics methods
     try
         return faces(mesh)
@@ -136,12 +136,12 @@ function read_binary_stl(filename::String)
         n_triangles = read(file, UInt32)
 
         # For each triangle
-        for i in 1:n_triangles
+        for i = 1:n_triangles
             # Skip normal vector (3 floats = 12 bytes)
             skip(file, 12)
 
             # Read 3 vertices (each vertex is 3 floats = 12 bytes)
-            for j in 1:3
+            for j = 1:3
                 x = read(file, Float32)
                 y = read(file, Float32)
                 z = read(file, Float32)
@@ -199,35 +199,35 @@ function process_stl_mesh(vertices, triangles)
     # Use a spatial hashing approach for much faster vertex deduplication
     tol = 1e-10
     scale_factor = floor(Int, 1/tol)  # Scaling factor for discretization
-    
+
     # Dictionary to map discretized coordinates to vertex indices
-    vertex_map = Dict{NTuple{3,Int}, Vector{Int}}()
+    vertex_map = Dict{NTuple{3,Int},Vector{Int}}()
     unique_vertices = Vector{Vector{Float64}}()
     new_triangles = Vector{Vector{Int}}()
-    
+
     # Function to discretize coordinates to integer grid for spatial hashing
     function discretize(v)
         return (
             floor(Int, v[1] * scale_factor),
             floor(Int, v[2] * scale_factor),
-            floor(Int, v[3] * scale_factor)
+            floor(Int, v[3] * scale_factor),
         )
     end
-    
+
     # Pre-allocate buffer for the triangle indices
     for triangle in triangles
         new_triangle = Vector{Int}(undef, 3)
-        
+
         for (i, vertex_idx) in enumerate(triangle)
             vertex = vertices[vertex_idx]
-            
+
             # Get discretized coordinates for spatial hashing
             grid_pos = discretize(vertex)
-            
+
             # Check neighborhood cells (current cell and immediate neighbors)
             found = false
             found_idx = 0
-            
+
             # Check for matching vertices in the current cell
             if haskey(vertex_map, grid_pos)
                 for idx in vertex_map[grid_pos]
@@ -238,32 +238,35 @@ function process_stl_mesh(vertices, triangles)
                     end
                 end
             end
-            
+
             # If not found in current cell, check all potential neighboring cells
             if !found
                 # Only check neighboring cells if vertex is close to a boundary
-                for dx in -1:1, dy in -1:1, dz in -1:1
+                for dx = -1:1, dy = -1:1, dz = -1:1
                     if dx == 0 && dy == 0 && dz == 0
                         continue  # Skip current cell, already checked
                     end
-                    
+
                     # Vertex position within cell
                     pos_in_cell = (
                         (vertex[1] * scale_factor) - floor(vertex[1] * scale_factor),
                         (vertex[2] * scale_factor) - floor(vertex[2] * scale_factor),
-                        (vertex[3] * scale_factor) - floor(vertex[3] * scale_factor)
+                        (vertex[3] * scale_factor) - floor(vertex[3] * scale_factor),
                     )
-                    
+
                     # Only check cells that could contain vertices within tolerance
-                    if ((dx == -1 && pos_in_cell[1] < tol * scale_factor) ||
+                    if (
+                        (dx == -1 && pos_in_cell[1] < tol * scale_factor) ||
                         (dx == 1 && pos_in_cell[1] > 1 - tol * scale_factor) ||
                         (dy == -1 && pos_in_cell[2] < tol * scale_factor) ||
                         (dy == 1 && pos_in_cell[2] > 1 - tol * scale_factor) ||
                         (dz == -1 && pos_in_cell[3] < tol * scale_factor) ||
-                        (dz == 1 && pos_in_cell[3] > 1 - tol * scale_factor))
-                        
-                        neighbor_pos = (grid_pos[1] + dx, grid_pos[2] + dy, grid_pos[3] + dz)
-                        
+                        (dz == 1 && pos_in_cell[3] > 1 - tol * scale_factor)
+                    )
+
+                        neighbor_pos =
+                            (grid_pos[1] + dx, grid_pos[2] + dy, grid_pos[3] + dz)
+
                         if haskey(vertex_map, neighbor_pos)
                             for idx in vertex_map[neighbor_pos]
                                 if norm(vertex - unique_vertices[idx]) < tol
@@ -273,7 +276,7 @@ function process_stl_mesh(vertices, triangles)
                                 end
                             end
                         end
-                        
+
                         # Break out of all loops if found
                         if found
                             break
@@ -281,12 +284,12 @@ function process_stl_mesh(vertices, triangles)
                     end
                 end
             end
-            
+
             # If vertex is unique, add it to our collection
             if !found
                 push!(unique_vertices, vertex)
                 found_idx = length(unique_vertices)
-                
+
                 # Add to spatial hash map
                 if !haskey(vertex_map, grid_pos)
                     vertex_map[grid_pos] = [found_idx]
@@ -294,13 +297,13 @@ function process_stl_mesh(vertices, triangles)
                     push!(vertex_map[grid_pos], found_idx)
                 end
             end
-            
+
             # Set index in the new triangle
             new_triangle[i] = found_idx
         end
-        
+
         push!(new_triangles, new_triangle)
     end
-    
+
     return unique_vertices, new_triangles
 end

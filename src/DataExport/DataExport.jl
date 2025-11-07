@@ -1,6 +1,7 @@
 module DataExport
-  
-export SelectProjectedNodes, exportToVTU, exportStructuredPointsToVTK, exportSdfToVTI, export_sdf_results
+
+export SelectProjectedNodes,
+    exportToVTU, exportStructuredPointsToVTK, exportSdfToVTI, export_sdf_results
 
 using Statistics
 using LinearAlgebra
