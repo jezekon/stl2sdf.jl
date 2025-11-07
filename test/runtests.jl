@@ -98,26 +98,26 @@ using BenchmarkTools
 
         # 1. Import STL file
         print_info("Importing STL file: $taskName")
-        (X, IEN) = import_stl("../data/$(taskName).stl") # -> Vector of vectors
+        (X, IEN) = import_stl("../data/$(taskName).stl")
 
-        # 3. Create triangular mesh (always needed)
+        # 2. Create triangular mesh (always needed)
         print_info("Creating triangular mesh")
         TriMesh = TriangularMesh(X, IEN)
 
-        # 4. Create SDF grid
+        # 3. Create SDF grid
         print_info("Setting up SDF grid")
         X_min, X_max = getMesh_AABB(TriMesh.X)
-        sdf_grid = Grid(X_min, X_max, N, 3) # cartesian grid
+        sdf_grid = Grid(X_min, X_max, N, 3)
         points = generateGridPoints(sdf_grid)
 
-        # 5. Compute SDF
+        # 4. Compute SDF
         print_info("Computing unsigned distances")
         (dists, xp) = evalDistancesOnTriMesh(TriMesh, sdf_grid, points)
 
         print_info("Computing signs")
         (signs, confidences) = raycast_sign_detection(TriMesh, sdf_grid, points)
 
-        # Optional: log low confidence points
+        # Low confidence points
         if any(c -> c < 0.6, confidences)
             low_conf_count = count(c -> c < 0.6, confidences)
             print_warning("$(low_conf_count) points have low confidence (<0.6)")
@@ -126,16 +126,11 @@ using BenchmarkTools
         print_info("Combining distances and signs to create SDF")
         sdf_dists = dists .* signs
 
-        # 6. Apply RBF smoothing
+        # 7. Apply RBF smoothing
         print_info("Applying RBF smoothing")
-        (fine_sdf, fine_grid) = RBFs_smoothing(
-            sdf_dists,
-            sdf_grid,
-            is_interpolation = :interpolation,
-            grid_refinement = 1.0,
-        )
+        (fine_sdf, fine_grid) = RBFs_smoothing(sdf_dists, sdf_grid, true, 1)
 
         exportSdfToVTI("$(taskName)_sdf.vti", sdf_grid, sdf_dists, "distance")
-        exportSdfToVTI("fine-$(base_name)_sdf.vti", fine_grid, fine_sdf, "distance")
+        exportSdfToVTI("fine-$(taskName)_sdf.vti", fine_grid, fine_sdf, "distance")
     end
 end

@@ -26,8 +26,6 @@ function stl_to_sdf(stl_filename::String; options::SDFOptions = SDFOptions())
     print_info("Importing STL file: $stl_filename")
     (X, IEN) = import_stl(stl_filename)
 
-    # 2. Try Tetgen, fallback to raycast if fails
-    TetMesh = nothing
     # 3. Create triangular mesh (always needed)
     print_info("Creating triangular mesh")
     TriMesh = TriangularMesh(X, IEN)
@@ -63,18 +61,8 @@ function stl_to_sdf(stl_filename::String; options::SDFOptions = SDFOptions())
     (fine_sdf, fine_grid) =
         RBFs_smoothing(sdf_dists, sdf_grid, is_interpolation, options.grid_refinement)
 
-    # 7. Save data to JLD2 file
-    # sdf_output_file = "$(base_name)_sdf.jld2"
-    # grid_output_file = "$(base_name)_grid.jld2"
-    # print_info("Saving SDF data to $sdf_output_file and $grid_output_file")
-    # @save sdf_output_file fine_sdf
-    # @save grid_output_file fine_grid
+    # 7. Save data to VTI file
+    exportSdfToVTI("$(stl_filename)-sdf.vti", sdf_grid, sdf_dists, "distance")
+    exportSdfToVTI("$(stl_filename)-fine_sdf.vti", fine_grid, fine_sdf, "distance")
 
-    # Export the results as VTI format for visualization
-    print_info("Exporting SDF to VTI file")
-    exportSdfToVTI("$(base_name)_sdf.vti", sdf_grid, sdf_dists, "distance")
-    exportSdfToVTI("fine-$(base_name)_sdf.vti", fine_grid, fine_sdf, "distance")
-
-    # Return results
-    # return (sdf_dists, sdf_grid, fine_sdf, fine_grid)
 end

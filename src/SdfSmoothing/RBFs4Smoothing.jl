@@ -312,8 +312,9 @@ function RBFs_smoothing(
     println("Computing $name on the fine grid...")
     @time fine_LSF = rbf_interpolation_kdtree(fine_grid, coarse_grid, weights, kernel)
 
-    # Convert to 3D array for output
-    fine_sdf_array = vector_to_array(fine_LSF, dim)
+    # Create Grid structure for fine grid
+    new_grid = Grid(my_grid.AABB_min, my_grid.AABB_max, maximum(my_grid.N) * smooth, 0)
 
-    return fine_sdf_array, fine_grid
+    # return fine_sdf_array, fine_grid
+    return fine_LSF, new_grid
 end
