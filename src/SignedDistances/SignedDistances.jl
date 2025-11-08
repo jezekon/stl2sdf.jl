@@ -1,6 +1,7 @@
 module SignedDistances
 
-export evalDistancesOnTriMesh, raycast_sign_detection
+export evalDistancesOnTriMesh,
+    raycast_sign_detection, remove_sdf_artifacts!, analyze_sdf_components
 
 using Base.Threads
 using Statistics
@@ -8,7 +9,6 @@ using StaticArrays
 using LinearAlgebra
 using ProgressMeter
 using NearestNeighbors
-using Random
 using ImplicitBVH
 using ImplicitBVH: BBox, BSphere
 
@@ -22,5 +22,8 @@ include("dfOnTriangularMesh.jl")
 
 # Raycast sign detection:
 include("RaycastingSignDetection.jl")
+
+# SDF artifact removal:
+include("SdfArtifactRemoval.jl")
 
 end

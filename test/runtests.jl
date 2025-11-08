@@ -12,128 +12,68 @@ using BenchmarkTools
 @testset "stl2sdf.jl" begin
     # Test configuration flags
     Import_beam = false
-    Import_bunny = false
-    RUN_lin_beam = false
-    RUN_main_some_opts = false
-    RUN_main_opts = false
-    RUN_beam_Mecas = true
+    RUN_main_opts = true
+    RUN_beam = false
 
-    #NOTE:
     if Import_beam
-        taskName = "beam-approx"
+        taskName = "Beam"
 
-        @time (X, IEN) = import_stl("../data/$(taskName).stl") # -> Vector of vectors
-        println(typeof(X))
-        println(size(X))
-        println(X[1])
-        println(typeof(IEN))
-        println(size(IEN))
-        println(IEN[1])
-    end
+        print_info("Testing STL import for $(taskName).stl")
+        @time (X, IEN) = import_stl("../data/$(taskName).stl")
 
-    #NOTE:
-    if Import_bunny
-        # taskName = "StanfordBunny_small"
-        taskName = "StanfordBunny_large"
+        println("\n--- Vertex Data (X) ---")
+        println("Type: ", typeof(X))
+        println("Number of vertices: ", length(X))
+        println("First vertex: ", X[1])
+        println("Vertex dimensions: ", length(X[1]))
 
-        @time (X, IEN) = import_stl("../data/$(taskName).stl") # -> Vector of vectors
-    end
+        println("\n--- Element Connectivity (IEN) ---")
+        println("Type: ", typeof(IEN))
+        println("Number of triangles: ", length(IEN))
+        println("First triangle nodes: ", IEN[1])
+        println("Nodes per triangle: ", length(IEN[1]))
 
-    #NOTE:
-    if RUN_lin_beam
-        taskName = "beam-approx"
-        # taskName = "StanfordBunny_small"
-
-        N = 120  # Number of cells along the longest side
-
-        # Data from stl:
-        (X, IEN) = import_stl("../data/$(taskName).stl") # -> Vector of vectors
-        # (X, IEN) = import_stl("data/$(taskName).stl")
-
-        # Data from Tetgen
-        run_tetgen(taskName, "../data")  # Run in specified directory
-        (X_tet, IEN_tet) = import_tetgen_mesh("../data/$(taskName).1") # -> Vector of vectors
-        # (X_tet, IEN_tet) = import_tetgen_mesh("data/$(taskName).1")
-
-        TriMesh = TriangularMesh(X, IEN)
-        TetMesh = Mesh(X_tet, IEN_tet)
-
-        ## Grid:
-        X_min, X_max = getMesh_AABB(TriMesh.X)
-        sdf_grid = Grid(X_min, X_max, N, 3) # cartesian grid
-        points = generateGridPoints(sdf_grid) # uzly pravidelné mřížky
-
-        ## SFD from triangular mesh:
-        (dists, xp) = evalDistancesOnTriMesh(TriMesh, sdf_grid, points) # Vector{Float64}
-        (signs, _) = raycast_sign_detection(TriMesh, sdf_grid, points)
-        sdf_dists = dists .* signs
-
-        exportSdfToVTI(taskName * "_SDF.vti", sdf_grid, sdf_dists, "distance")
-
-        # RBF smoothing:
-        is_interp = false
-        (fine_sdf, fine_grid) =
-            RBFs_smoothing(TetMesh, sdf_dists, sdf_grid, is_interp, 2, taskName) # interpolation == true, aproximation == false, smooth
-        export_sdf_results(fine_sdf, fine_grid, sdf_grid, taskName, 2, is_interp)
-    end
-
-    if RUN_main_some_opts
-        options = SDFOptions(grid_step = 0.8)  # Use defaults for other parameters
-        result = stl_to_sdf("beam-approx.stl", options = options)
+        print_success("Import test completed")
     end
 
     if RUN_main_opts
         # Specify all options
-        options = SDFOptions(
+        options = Options(
             smoothing_method = :interpolation,
-            grid_refinement = 2,
-            grid_step = 0.8,
+            grid_refinement = 1,
+            cell_size = 0.5,
+            remove_artifacts = true,
+            artifact_ratio = 0.01,
         )
-        result = stl_to_sdf("beam-approx.stl", options = options)
+        result = stl_to_sdf("../data/artifacts.stl", options = options)
     end
 
-    if RUN_beam_Mecas
-        taskName = "beam_Mecas"
-        N = 180  # Number of cells along the longest side
+    if RUN_beam
+        taskName = "Beam"
+        N = 80  # Number of cells along the longest side
 
         # 1. Import STL file
         print_info("Importing STL file: $taskName")
-        (X, IEN) = import_stl("../data/$(taskName).stl") # -> Vector of vectors
+        (X, IEN) = import_stl("../data/$(taskName).stl")
 
-        # 2. Try Tetgen, fallback to raycast if fails
-        TetMesh = nothing
-        tetgen_success = false
-
-        try
-            print_info("Running Tetgen on $taskName")
-            run_tetgen(taskName, "../data")  # Run in specified directory
-            (X_tet, IEN_tet) = import_tetgen_mesh("../data/$(taskName).1") # -> Vector of vectors
-            TetMesh = Mesh(X_tet, IEN_tet)
-            tetgen_success = true
-            print_success("Tetgen processing successful")
-        catch e
-            print_warning("Tetgen failed: $e")
-            print_info("Will use raycast fallback for sign detection")
-        end
-
-        # 3. Create triangular mesh (always needed)
+        # 2. Create triangular mesh (always needed)
         print_info("Creating triangular mesh")
         TriMesh = TriangularMesh(X, IEN)
 
-        # 4. Create SDF grid
+        # 3. Create SDF grid
         print_info("Setting up SDF grid")
         X_min, X_max = getMesh_AABB(TriMesh.X)
-        sdf_grid = Grid(X_min, X_max, N, 3) # cartesian grid
+        sdf_grid = Grid(X_min, X_max, N, 3)
         points = generateGridPoints(sdf_grid)
 
-        # 5. Compute SDF
+        # 4. Compute SDF
         print_info("Computing unsigned distances")
         (dists, xp) = evalDistancesOnTriMesh(TriMesh, sdf_grid, points)
 
         print_info("Computing signs")
         (signs, confidences) = raycast_sign_detection(TriMesh, sdf_grid, points)
 
-        # Optional: log low confidence points
+        # Low confidence points
         if any(c -> c < 0.6, confidences)
             low_conf_count = count(c -> c < 0.6, confidences)
             print_warning("$(low_conf_count) points have low confidence (<0.6)")
@@ -142,6 +82,11 @@ using BenchmarkTools
         print_info("Combining distances and signs to create SDF")
         sdf_dists = dists .* signs
 
+        # 7. Apply RBF smoothing
+        print_info("Applying RBF smoothing")
+        (fine_sdf, fine_grid) = RBFs_smoothing(sdf_dists, sdf_grid, true, 1)
+
         exportSdfToVTI("$(taskName)_sdf.vti", sdf_grid, sdf_dists, "distance")
+        exportSdfToVTI("fine-$(taskName)_sdf.vti", fine_grid, fine_sdf, "distance")
     end
 end
