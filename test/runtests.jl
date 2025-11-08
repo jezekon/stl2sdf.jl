@@ -15,8 +15,8 @@ using BenchmarkTools
     Import_bunny = false
     RUN_lin_beam = false
     RUN_main_some_opts = false
-    RUN_main_opts = false
-    RUN_beam_Mecas = true
+    RUN_main_opts = true
+    RUN_beam_Mecas = false
 
     #NOTE:
     if Import_beam
@@ -84,12 +84,14 @@ using BenchmarkTools
 
     if RUN_main_opts
         # Specify all options
-        options = SDFOptions(
+        options = Options(
             smoothing_method = :interpolation,
             grid_refinement = 2,
-            grid_step = 0.8,
+            cell_size = 0.8,
+            remove_artifacts = true,
+            artifact_ratio = 0.01,
         )
-        result = stl_to_sdf("beam-approx.stl", options = options)
+        result = stl_to_sdf("../data/beam-approx.stl", options = options)
     end
 
     if RUN_beam_Mecas

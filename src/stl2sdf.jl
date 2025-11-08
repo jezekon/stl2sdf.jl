@@ -30,6 +30,6 @@ using .SdfSmoothing
 # using .ImplicitDomainMeshing
 include("stl_to_sdf.jl")
 
-export stl_to_sdf, SDFOptions
+export stl_to_sdf, Options
 
 end # module stl2sdf
