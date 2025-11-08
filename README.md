@@ -3,7 +3,7 @@
 A Julia package for converting triangular surface meshes (STL files) to implicit geometries defined by Signed Distance Functions (SDFs). This package transforms explicit boundary representations into smooth volumetric implicit representations while preserving the original geometry's volume.
 
 <p align="center">
-  <img src="doc/Rabbit.png" width="60%" alt="SDF Rabbit" />
+  <img src="doc/Rabbit.png" width="30%" alt="SDF Rabbit" />
 </p>
 
 ## Overview
