@@ -11,32 +11,41 @@ using BenchmarkTools
 
 @testset "stl2sdf.jl" begin
     # Test configuration flags
-    Import_beam = true
+    Import_beam = false
     RUN_main_opts = true
-    RUN_beam = true
+    RUN_beam = false
 
     if Import_beam
         taskName = "Beam"
 
-        @time (X, IEN) = import_stl("../data/$(taskName).stl") # -> Vector of vectors
-        println(typeof(X))
-        println(size(X))
-        println(X[1])
-        println(typeof(IEN))
-        println(size(IEN))
-        println(IEN[1])
+        print_info("Testing STL import for $(taskName).stl")
+        @time (X, IEN) = import_stl("../data/$(taskName).stl")
+
+        println("\n--- Vertex Data (X) ---")
+        println("Type: ", typeof(X))
+        println("Number of vertices: ", length(X))
+        println("First vertex: ", X[1])
+        println("Vertex dimensions: ", length(X[1]))
+
+        println("\n--- Element Connectivity (IEN) ---")
+        println("Type: ", typeof(IEN))
+        println("Number of triangles: ", length(IEN))
+        println("First triangle nodes: ", IEN[1])
+        println("Nodes per triangle: ", length(IEN[1]))
+
+        print_success("Import test completed")
     end
 
     if RUN_main_opts
         # Specify all options
         options = Options(
             smoothing_method = :interpolation,
-            grid_refinement = 2,
-            cell_size = 0.8,
+            grid_refinement = 1,
+            cell_size = 0.5,
             remove_artifacts = true,
             artifact_ratio = 0.01,
         )
-        result = stl_to_sdf("../data/Beam.stl", options = options)
+        result = stl_to_sdf("../data/artifacts.stl", options = options)
     end
 
     if RUN_beam

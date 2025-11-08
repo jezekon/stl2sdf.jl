@@ -118,7 +118,7 @@ function noninteractive_sdf_grid_setup(mesh::TriangularMesh, B::Float64)
 
     # Create grid with 3-cell margin
     sdf_grid = MeshGrid.Grid(X_min, X_max, N_new, 3)
-    println("Number of all grid points: ", sdf_grid.ngp)
+    println("Number of all grid points: $(RED)$(BOLD)$(sdf_grid.ngp)$(RESET)")
 
     return sdf_grid
 end
