@@ -343,7 +343,7 @@ function raycast_sign_detection(
     confidence_threshold::Float64 = 0.6,
     use_winding_fallback::Bool = true,
 )::Tuple{Vector{Float64},Vector{Float64}}
-    print_info("Using optimized adaptive ray casting for sign detection...")
+    print_info("Using adaptive ray casting for sign detection...")
 
     # Convert mesh to triangle format
     triangles = Vector{Tuple{Vector{Float64},Vector{Float64},Vector{Float64}}}()
@@ -394,7 +394,7 @@ function raycast_sign_detection(
     low_confidence_count = count(c -> c < confidence_threshold, confidences)
     mean_confidence = mean(confidences)
 
-    print_success("Optimized ray casting completed!")
+    print_success("Ray casting completed!")
     print_info("Mean confidence: $(round(mean_confidence, digits=3))")
     print_info(
         "Low confidence points: $(low_confidence_count)/$(ngp) ($(round(100*low_confidence_count/ngp, digits=1))%)",
