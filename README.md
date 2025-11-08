@@ -3,13 +3,13 @@
 A Julia package for converting triangular surface meshes (STL files) to implicit geometries defined by Signed Distance Functions (SDFs). This package transforms explicit boundary representations into smooth volumetric implicit representations while preserving the original geometry's volume.
 
 <p align="center">
-  <img src="doc/Bunny_stl_cut.png" width="45%" alt="Original STL surface mesh" />
-  <img src="doc/Bunny_sdf_cut.png" width="45%" alt="Smoothed SDF representation" />
+  <img src="doc/Rabbit.png" width="60%" alt="SDF Rabbit" />
 </p>
 
 ## Overview
 
 This package provides tools to:
+
 1. Import STL files (both ASCII and binary formats)
 2. Compute high-quality Signed Distance Functions
 3. Apply RBF-based smoothing for improved SDF quality
@@ -27,6 +27,7 @@ Pkg.add("https://github.com/jezekon/stl2sdf.jl")
 ## Dependencies
 
 This package requires:
+
 - Tetgen executable in your system PATH
 - Julia packages: GeometryBasics, MeshIO, FileIO, LinearAlgebra, NearestNeighbors, KernelFunctions, IterativeSolvers, FastGaussQuadrature, JLD2, WriteVTK
 
@@ -36,11 +37,13 @@ This package requires:
 stl_to_sdf(stl_filename::String; options::SDFOptions = SDFOptions())
 ```
 
-### Parameters:
+### Parameters
+
 - `stl_filename::String`: Path to the input STL file
 - `options::SDFOptions`: Configuration options (optional)
 
-### Return Value:
+### Return Value
+
 - `Tuple`: (sdf_dists, sdf_grid, fine_sdf, fine_grid)
   - `sdf_dists`: Original SDF values on coarse grid
   - `sdf_grid`: Original grid structure
@@ -60,19 +63,22 @@ SDFOptions(;
 )
 ```
 
-### Options:
+### Options
 
 #### smoothing_method::Symbol
+
 - Method used for SDF smoothing
 - Valid values:
   - `:interpolation`: Preserves original SDF values at grid points
   - `:approximation`: May modify values for smoother results
 
 #### grid_refinement::Int
+
 - Factor by which to refine the grid for the smoothed SDF
 - Valid values: 1 (same as original) or 2 (twice the resolution)
 
 #### grid_step::Union{Float64, Nothing}
+
 - Explicit grid step size for SDF computation
 - If `nothing`, an interactive prompt will help determine an appropriate size
 - Use this for automated processing or batch jobs
@@ -119,5 +125,6 @@ The package follows this processing pipeline:
 Results can be visualized in ParaView using the exported VTI files. The SDF is stored as a scalar field, and the zero-isosurface represents the boundary of the object.
 
 ## TODO List
+
 - [ ] Implement more efficient KD-tree for large meshes
 - [ ] Include additional mesh repair operations
