@@ -36,15 +36,17 @@ Convert STL mesh to signed distance function:
 stl_to_sdf(stl_filename::String; options::Options = Options())
 ```
 
-#### Parameters:
+#### Parameters
+
 - `stl_filename::String`: Path to input STL file (ASCII or binary)
 - `options::Options`: Configuration options (optional)
 
-#### Return Value:
-- `Tuple`: Empty tuple (results saved to disk as VTI and JLD2 files)
-- **Output files**: 
-  - `{name}_sdf.vti`: Original SDF on coarse grid
-  - `{name}_fine_sdf.vti`: Smoothed SDF on refined grid
+#### Return Value
+
+- `Tuple`: Empty tuple (results saved to disk as VTI files)
+- **Output files**:
+  - `{name}_sdf.vti`: Original SDF on coarse grid (always generated)
+  - `{name}_fine_sdf.vti`: Smoothed SDF on refined grid (only if smoothing enabled)
 
 ### Options
 
@@ -52,10 +54,10 @@ Configure the SDF generation with the following parameters:
 
 ```julia
 options = Options(;
-    smoothing_method = :interpolation,     # :interpolation, :approximation, or nothing (no smoothing)
+    smoothing_method = nothing,            # :interpolation, :approximation, or nothing (default: no smoothing)
     grid_refinement = 1,                   # Grid refinement factor (1 or 2)
     cell_size = nothing,                   # Grid cell size (nothing = interactive)
-    remove_artifacts = true,               # Remove small disconnected components
+    remove_artifacts = false,              # Remove small disconnected components (default: false)
     artifact_ratio = 0.01                  # Min component size (fraction of largest)
 )
 ```
@@ -63,6 +65,7 @@ options = Options(;
 #### Option Details
 
 - **smoothing_method**: RBF smoothing approach
+  - `nothing` - No smoothing (default)
   - `:interpolation` - Preserves exact SDF values at grid points
   - `:approximation` - Smoother results, may modify values
 - **grid_refinement**: Output grid resolution multiplier (1 = same as input, 2 = double)
@@ -84,14 +87,16 @@ stl_to_sdf("Data/Bunny.stl")
 For complete examples, see [`test/Examples/`](test/Examples/):
 
 #### Basic Example
+
 ```julia
 # Simple beam with default settings
 julia --project=. test/Examples/01_basic_beam.jl
 ```
 
 #### Complex Example
+
 ```julia
-# With smoothing, artifacts cleanup
+# With smoothing and artifacts cleanup
 julia --project=. test/Examples/02_complex_artifacts.jl
 julia --project=. test/Examples/03_manual_sdf.jl
 ```
@@ -103,6 +108,7 @@ julia --project=. test/Examples/03_manual_sdf.jl
 3. Set **Isosurfaces** value to 0.0 to visualize the zero-level (surface)
 
 For distance field visualization:
+
 1. Select **Point Gaussian** to show signed distance values
 2. Color by `distance` field
 3. Adjust color scale if needed
