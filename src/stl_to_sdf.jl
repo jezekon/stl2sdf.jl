@@ -1,29 +1,12 @@
 # src/stl_to_sdf.jl
 
-"""
-    Options
-
-Configuration for STL to SDF conversion process.
-
-# Fields
-- `smoothing_method::Union{Symbol,Nothing}` - RBF smoothing method: :interpolation, :approximation, or nothing (no smoothing)
-- `grid_refinement::Int` - Grid refinement factor for smoothed SDF (1 = same, 2 = double resolution)
-- `cell_size::Union{Float64,Nothing}` - Grid cell size in spatial units (nothing triggers interactive setup)
-- `remove_artifacts::Bool` - Remove small disconnected components from SDF field
-- `artifact_ratio::Float64` - Minimum component size as ratio of largest component (0.01 = 1%)
-
-# Example
-```julia
-opts = Options(cell_size=0.5, remove_artifacts=true, smoothing_method=nothing)  # No smoothing
-opts = Options(cell_size=0.5, smoothing_method=:interpolation, grid_refinement=2)  # With smoothing
-```
-"""
 struct Options
     smoothing_method::Union{Symbol,Nothing}
     grid_refinement::Int
     cell_size::Union{Float64,Nothing}
     remove_artifacts::Bool
     artifact_ratio::Float64
+    export_raw_sdf::Bool  # New: export raw SDF to VTI + JLD2
 
     function Options(;
         smoothing_method::Union{Symbol,Nothing} = nothing,
@@ -31,6 +14,7 @@ struct Options
         cell_size::Union{Float64,Nothing} = nothing,
         remove_artifacts::Bool = false,
         artifact_ratio::Float64 = 0.01,
+        export_raw_sdf::Bool = true,
     )
         return new(
             smoothing_method,
@@ -38,40 +22,11 @@ struct Options
             cell_size,
             remove_artifacts,
             artifact_ratio,
+            export_raw_sdf,
         )
     end
 end
 
-"""
-    stl_to_sdf(stl_filename::String; options::Options = Options())
-
-Convert STL mesh to signed distance function with optional RBF smoothing.
-
-# Arguments
-- `stl_filename::String` - Path to input STL file (ASCII or binary format)
-- `options::Options` - Configuration options for SDF generation
-
-# Returns
-- Nothing (exports VTI files)
-
-# Workflow
-1. Import and process STL mesh
-2. Setup computational grid (interactive or automatic)
-3. Compute unsigned distances to mesh surface
-4. Determine signs via raycasting
-5. Optionally remove artifacts from SDF
-6. Optionally apply RBF smoothing with optional refinement
-7. Export VTI files for visualization
-
-# Example
-```julia
-opts = Options(cell_size=0.5, remove_artifacts=true, smoothing_method=nothing)
-stl_to_sdf("model.stl", options=opts)  # No smoothing, only raw SDF
-
-opts = Options(cell_size=0.5, smoothing_method=:interpolation, grid_refinement=2)
-stl_to_sdf("model.stl", options=opts)  # With smoothing
-```
-"""
 function stl_to_sdf(stl_filename::String; options::Options = Options())
     # Validate inputs
     if options.smoothing_method !== nothing
@@ -108,7 +63,6 @@ function stl_to_sdf(stl_filename::String; options::Options = Options())
     print_info("Computing signs")
     (signs, confidences) = raycast_sign_detection(TriMesh, sdf_grid, points)
 
-    # Log low confidence points
     if any(c -> c < 0.6, confidences)
         low_conf_count = count(c -> c < 0.6, confidences)
         print_warning("$(low_conf_count) points have low confidence (<0.6)")
@@ -129,8 +83,30 @@ function stl_to_sdf(stl_filename::String; options::Options = Options())
         print_success("Artifact removal completed: $nodes_flipped nodes modified")
     end
 
-    # 8. Export raw SDF result
-    exportSdfToVTI("$(base_name)_sdf.vti", sdf_grid, sdf_dists, "distance")
+    # 8. Export raw SDF if requested
+    if options.export_raw_sdf
+        B = round(sdf_grid.cell_size, digits = 4)
+
+        # Export to VTI
+        exportSdfToVTI(
+            "$(base_name)_SDF_CellSize-$(B).vti",
+            sdf_grid,
+            sdf_dists,
+            "distance",
+        )
+
+        # Export to JLD2
+        println("Saving raw SDF results to JLD2 files...")
+        sdf_dists_processed = SdfSmoothing.process_vector(sdf_dists)
+        raw_sdf_dims = sdf_grid.N .+ 1
+        raw_sdf = reshape(sdf_dists_processed, Tuple(raw_sdf_dims))
+        raw_grid = SdfSmoothing.create_grid(sdf_grid.N, sdf_grid)
+
+        @save "Z_$(base_name)_RawSDF_B-$(B).jld2" raw_sdf
+        @save "Z_$(base_name)_RawGrid_B-$(B).jld2" raw_grid
+
+        print_success("Raw SDF exported to VTI and JLD2")
+    end
 
     # 9. Apply RBF smoothing (only if smoothing_method is specified)
     if options.smoothing_method !== nothing
@@ -139,7 +115,6 @@ function stl_to_sdf(stl_filename::String; options::Options = Options())
         (fine_sdf, fine_grid) =
             RBFs_smoothing(sdf_dists, sdf_grid, is_interpolation, options.grid_refinement)
 
-        # Export smoothed result
         exportSdfToVTI("$(base_name)_fine_sdf.vti", fine_grid, fine_sdf, "distance")
     end
 
