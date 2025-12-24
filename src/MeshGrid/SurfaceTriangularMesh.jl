@@ -6,7 +6,7 @@ function extractSurfaceTriangularMesh(mesh::Mesh)
     ISN = mesh.ISN # connectivity face - edges
     nel = mesh.nel # number of elements
     nes = mesh.nes # number of element segments (faces) 6
-    nsn = mesh.nsn # number of segment nodes (kolik má stěna uzlů) 4
+    nsn = mesh.nsn # number of segment nodes
 
     X_new = Vector{Vector{Float64}}()
     push!(X_new, vec(X[:, 1]))
@@ -14,12 +14,11 @@ function extractSurfaceTriangularMesh(mesh::Mesh)
     IEN_new = Vector{Vector{Int64}}()
 
     for el = 1:nel
-        # ρₑ = ρₙ[IEN[:, el]]
         commonEls = []
-        for sg = 1:nes # 1:6 je face součástí pouze jednoho elementu?
+        for sg = 1:nes
             commonEls = INE[IEN[ISN[sg][1], el]]
             for a = 2:nsn # 2:4
-                idx = findall(in(INE[IEN[ISN[sg][a], el]]), commonEls) # mají uzly (jedné stěny) společný pouze jeden element
+                idx = findall(in(INE[IEN[ISN[sg][a], el]]), commonEls)
                 commonEls = commonEls[idx]
             end
 
